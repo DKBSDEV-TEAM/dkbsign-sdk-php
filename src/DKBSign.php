@@ -43,7 +43,13 @@ class DKBSign
     {
         $this->pages[] = [
             'page' => $page,
-            'signatures' => $signatures,
+            'signatures' => array_map(fn (Signature $signature) => [
+                'x' => $signature->positionX,
+                'y' => $signature->positionY,
+                'width' => $signature->width,
+                'height' => $signature->height,
+                'type' => $signature->type,
+            ], $signatures),
         ];
 
         return $this;
