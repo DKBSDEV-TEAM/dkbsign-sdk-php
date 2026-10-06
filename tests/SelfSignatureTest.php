@@ -30,7 +30,7 @@ final class SelfSignatureTest extends TestCase
                     positionY: 200,
                     width: 200,
                     height: 70,
-                    signatureType: SignatureType::SIGNATURE->value
+                    type: SignatureType::SIGNATURE->value
                 ),
             ])
             ->selfSign(886990);

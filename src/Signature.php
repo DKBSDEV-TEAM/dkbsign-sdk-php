@@ -13,6 +13,6 @@ class Signature
         public float $positionY,
         public float $width,
         public float $height,
-        public string $signatureType = SignatureType::SIGNATURE->value
+        public string $type = SignatureType::SIGNATURE->value
     ) {}
 }
