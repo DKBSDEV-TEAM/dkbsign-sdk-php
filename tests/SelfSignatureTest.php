@@ -12,17 +12,17 @@ final class SelfSignatureTest extends TestCase
 {
     public function test_can_send_otp(): void
     {
-        $response = new DKBSign('https://api.dkbsigns.com', '296|8eZcio82NqzaKM6PnxN3XpjNOZ3yqBEV8o9JTWBg109a0f75')->sendOtp();
+        $response = new DKBSign('https://api.dkbsigns.com', 'api-token')->sendOtp();
 
         $this->assertArrayHasKey('email', $response);
-        $this->assertTrue($response['email'] === 'elisee.nguessan@dkbsolutions.com');
+        $this->assertTrue($response['email'] === 'john@doe.com');
     }
 
     public function test_can_self_sign(): void
     {
-        $response = new DKBSign('https://api.dkbsigns.com', '296|8eZcio82NqzaKM6PnxN3XpjNOZ3yqBEV8o9JTWBg109a0f75')
-            ->file('/Users/m1pro2021/Documents/sample-local-pdf.pdf')
-            ->signatureImage('/Users/m1pro2021/Pictures/signature.png')
+        $response = new DKBSign('https://api.dkbsigns.com', 'api-token')
+            ->file('/path/to/document.pdf')
+            ->signatureImage('/path/to/signature.png')
             ->signatureLevel(SignatureLevel::SIMPLE->value)
             ->signature(0, [
                 new Signature(
