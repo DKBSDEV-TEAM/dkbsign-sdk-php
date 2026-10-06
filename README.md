@@ -65,20 +65,20 @@ Use a fresh `DKBSign` instance (or rebuild the fluent chain) before each sign re
 
 `DKBSign` is constructed with the API base URL and token. All HTTP calls send `Authorization: Bearer {token}`.
 
-| Method | HTTP | Purpose |
-|--------|------|---------|
-| `sendOtp()` | `POST {baseUrl}/api/v4/sign/otp` | JSON body; starts OTP for self-signing |
-| `selfSign(int $otpCode)` | `POST {baseUrl}/api/v4/sign` | Multipart upload of PDF, params, and signature image |
+| Method                   | HTTP                             | Purpose                                              |
+| ------------------------ | -------------------------------- | ---------------------------------------------------- |
+| `sendOtp()`              | `POST {baseUrl}/api/v4/sign/otp` | JSON body; starts OTP for self-signing               |
+| `selfSign(int $otpCode)` | `POST {baseUrl}/api/v4/sign`     | Multipart upload of PDF, params, and signature image |
 
 ### Fluent configuration
 
 Methods return `$this` so you can chain options before `selfSign()`:
 
-| Method | Description |
-|--------|-------------|
-| `file(string $path)` | Local path to the PDF to sign |
-| `signatureImage(string $path)` | Local path to the image used for the visual signature |
-| `signatureLevel(string $level)` | Legal/technical level (see `SignatureLevel`) |
+| Method                                    | Description                                                        |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| `file(string $path)`                      | Local path to the PDF to sign                                      |
+| `signatureImage(string $path)`            | Local path to the image used for the visual signature              |
+| `signatureLevel(string $level)`           | Legal/technical level (see `SignatureLevel`)                       |
 | `signature(int $page, array $signatures)` | Add one page of placements; call multiple times for multiple pages |
 
 Page numbers are **zero-based** (page `0` is the first page).
@@ -119,23 +119,23 @@ Errors from the API are not wrapped in custom exceptions; failed HTTP status cod
 
 ### `SignatureLevel`
 
-| Case | Value |
-|------|-------|
-| `SIMPLE` | `simple` |
-| `ADVANCED` | `advanced` |
+| Case        | Value       |
+| ----------- | ----------- |
+| `SIMPLE`    | `simple`    |
+| `ADVANCED`  | `advanced`  |
 | `QUALIFIED` | `qualified` |
 
 ### `SignatureType`
 
-| Case | Value |
-|------|-------|
+| Case        | Value       |
+| ----------- | ----------- |
 | `SIGNATURE` | `signature` |
-| `INITIALS` | `initials` |
-| `SEAL` | `seal` |
-| `QRCODE` | `qrcode` |
-| `DATE` | `date` |
-| `TEXT` | `text` |
-| `APPROVAL` | `approval` |
+| `INITIALS`  | `initials`  |
+| `SEAL`      | `seal`      |
+| `QRCODE`    | `qrcode`    |
+| `DATE`      | `date`      |
+| `TEXT`      | `text`      |
+| `APPROVAL`  | `approval`  |
 
 ## Development
 
@@ -154,7 +154,3 @@ Run tests (integration tests call the live API and require valid credentials and
 ## License
 
 MIT — see [composer.json](composer.json).
-
-## Author
-
-N'Guessan Kouadio Elisée — [elisee.nguessan@dkbsolutions.com](mailto:elisee.nguessan@dkbsolutions.com)
