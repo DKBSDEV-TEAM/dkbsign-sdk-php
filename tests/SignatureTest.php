@@ -6,12 +6,15 @@ use DKBSign\DKBSign;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Enums\SignatureType;
+use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Position;
 use DKBSign\Support\Signature;
 use DKBSign\Support\Signer;
+use Faker\Factory;
+use Faker\Generator;
 use PHPUnit\Framework\TestCase;
 
-final class SelfSignatureTest extends TestCase
+final class SignatureTest extends TestCase
 {
     protected string $baseUrl;
 
@@ -25,16 +28,20 @@ final class SelfSignatureTest extends TestCase
 
     protected int $otpCode;
 
+    protected Generator $faker;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        $this->faker = Factory::create();
 
         $this->baseUrl = getenv('DKBSIGN_BASE_URL') ?: 'https://api.dkbsigns.com';
         $this->apiToken = getenv('DKBSIGN_API_TOKEN') ?: '';
         $this->email = getenv('DKBSIGN_TEST_EMAIL') ?: '';
         $this->filePath = getenv('DKBSIGN_TEST_PDF') ?: '';
         $this->signaturePath = getenv('DKBSIGN_TEST_SIGNATURE_IMAGE') ?: '';
-        $this->otpCode = (int) (getenv('DKBSIGN_TEST_OTP') ?: '0');
+        $this->otpCode = (int) getenv('DKBSIGN_TEST_OTP') ?: 00000;
 
         if ($this->apiToken === '' || $this->email === '' || $this->filePath === '' || $this->signaturePath === '') {
             $this->markTestSkipped(
@@ -47,16 +54,12 @@ final class SelfSignatureTest extends TestCase
     {
         $response = new DKBSign($this->baseUrl, $this->apiToken)->sendOtp();
 
-        $this->assertArrayHasKey('email', $response);
-        $this->assertTrue($response['email'] === $this->email);
+        $this->assertTrue($response->statusCode === 200);
+        $this->assertTrue($response->body['email'] === $this->email);
     }
 
     public function test_can_self_sign(): void
     {
-        if ($this->otpCode <= 0) {
-            $this->markTestSkipped('Set DKBSIGN_TEST_OTP to run self-sign integration test.');
-        }
-
         $response = new DKBSign($this->baseUrl, $this->apiToken)
             ->setFile($this->filePath)
             ->setSignatureImage($this->signaturePath)
@@ -74,29 +77,24 @@ final class SelfSignatureTest extends TestCase
             ])
             ->selfSign($this->otpCode);
 
-        $this->assertArrayHasKey('signed_pdf_url', $response);
+        $this->assertTrue($response->statusCode === 200);
     }
 
     public function test_can_create_envelope(): void
     {
-        $signerEmail = getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: '';
-        if ($signerEmail === '') {
-            $this->markTestSkipped('Set DKBSIGN_TEST_SIGNER_EMAIL to run envelope integration test.');
-        }
-
         $response = new DKBSign($this->baseUrl, $this->apiToken)
             ->setDocuments([$this->filePath])
-            ->setInitiatorName(getenv('DKBSIGN_TEST_INITIATOR_NAME') ?: 'Integration Test')
-            ->setEnvelopeTitle('NDA')
-            ->setEnvelopeDescription('Please sign this NDA')
+            ->setInitiatorName($this->faker->company)
+            ->setEnvelopeTitle($this->faker->word)
+            ->setEnvelopeDescription($this->faker->sentence)
             ->setSignatureOrder(SignatureOrder::ORDERED->value)
             ->setSignatureLevel(SignatureLevel::ADVANCED->value)
             ->addSigner([
                 new Signer(
-                    firstName: 'Sarah',
-                    lastName: 'Doe',
-                    email: $signerEmail,
-                    phone: getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: '+2250000000000',
+                    firstName: $this->faker->firstName,
+                    lastName: $this->faker->lastName,
+                    email: getenv('DKBSIGN_TEST_SIGNER_EMAIL'),
+                    phone: getenv('DKBSIGN_TEST_SIGNER_PHONE'),
                     priority: 1,
                     positions: [
                         new Position(
@@ -108,10 +106,22 @@ final class SelfSignatureTest extends TestCase
                             signatureType: SignatureType::SIGNATURE->value
                         ),
                     ]
-                ),
-            ])
+                )]
+            )
             ->envelopes();
 
-        $this->assertArrayHasKey('batch_id', $response);
+        $this->assertTrue($response->statusCode === 200);
+    }
+
+    public function test_can_send_invitation(): void
+    {
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->sendInvitation(
+                recipientEmail: getenv('DKBSIGN_TEST_SIGNER_EMAIL'),
+                subject: 'Document awaiting for signature',
+                emailTemplate: new EmailTemplate('https://signature.link')
+            );
+
+        $this->assertTrue($response->statusCode === 202);
     }
 }
