@@ -38,10 +38,8 @@ use DKBSign\Enums\SignatureType;
 use DKBSign\Support\Position;
 use DKBSign\Support\Signature;
 
-$client = new DKBSign('https://api.dkbsigns.com', 'your-api-token');
-
 // Step 1: trigger OTP delivery
-$otpResponse = $client->sendOtp();
+$otpResponse = new DKBSign('https://api.dkbsigns.com', 'your-api-token')->sendOtp();
 // $otpResponse->body['email'], etc.
 
 // Step 2: sign (use the OTP code you received)
