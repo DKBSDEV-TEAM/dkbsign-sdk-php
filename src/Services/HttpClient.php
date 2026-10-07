@@ -6,9 +6,9 @@ namespace DKBSign\Services;
 
 use GuzzleHttp\Client;
 
-class HttpClient
+abstract class HttpClient
 {
-    public static function post(string $url, array $payload, ?string $bearerToken = null): array
+    public static function post(string $url, array $payload, ?string $bearerToken = null): HttpResponse
     {
         $response = new Client()->post($url, [
             'multipart' => $payload,
@@ -17,10 +17,13 @@ class HttpClient
             ],
         ]);
 
-        return json_decode((string) $response->getBody(), true);
+        return new HttpResponse(
+            body: json_decode((string) $response->getBody(), true),
+            statusCode: $response->getStatusCode()
+        );
     }
 
-    public static function postJson(string $url, array $payload = [], ?string $bearerToken = null): array
+    public static function postJson(string $url, array $payload = [], ?string $bearerToken = null): HttpResponse
     {
         $response = new Client()->post($url, [
             'json' => $payload,
@@ -28,6 +31,9 @@ class HttpClient
                 'Authorization' => 'Bearer '.$bearerToken,
             ], ]);
 
-        return json_decode((string) $response->getBody(), true);
+        return new HttpResponse(
+            body: json_decode((string) $response->getBody(), true),
+            statusCode: $response->getStatusCode()
+        );
     }
 }

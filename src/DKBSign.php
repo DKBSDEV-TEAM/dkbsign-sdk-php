@@ -7,7 +7,8 @@ namespace DKBSign;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Services\HttpClient;
-use DKBSign\Support\EnvelopeInvitationEmail;
+use DKBSign\Services\HttpResponse;
+use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Position;
 use DKBSign\Support\Signature;
 use DKBSign\Support\Signer;
@@ -162,7 +163,7 @@ final class DKBSign
         return $this;
     }
 
-    public function selfSign(int $otpCode): array
+    public function selfSign(int $otpCode): HttpResponse
     {
         $url = sprintf('%s/api/v4/sign', $this->baseUrl);
 
@@ -188,12 +189,12 @@ final class DKBSign
         ], $this->apiToken);
     }
 
-    public function sendOtp(): array
+    public function sendOtp(): HttpResponse
     {
         return HttpClient::postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl), bearerToken: $this->apiToken);
     }
 
-    public function envelopes(): array
+    public function envelopes(): HttpResponse
     {
         $url = sprintf('%s/api/v4/envelopes', $this->baseUrl);
 
@@ -222,63 +223,15 @@ final class DKBSign
             ],
         ], $this->apiToken);
 
-        $this->dispatchEnvelopeInvitations($response);
-
         return $response;
     }
 
-    /**
-     * Same second step as the web app after POST /envelopes (POST /api/notifications/email).
-     *
-     * @param  array<string, mixed>  $response
-     */
-    protected function dispatchEnvelopeInvitations(array $response): void
+    public function sendInvitation(string $recipientEmail, string $subject, EmailTemplate $emailTemplate): HttpResponse
     {
-        $signers = $response['signers'] ?? [];
-        if ($signers === []) {
-            return;
-        }
-
-        $documentName = (string) ($response['title'] ?? $this->envelopeTitle ?? 'Document');
-        $signersToInvite = $signers;
-
-        if ($this->signatureOrder === SignatureOrder::ORDERED->value && count($signers) > 1) {
-            $firstPriority = min(array_map(fn (array $s): int => (int) ($s['priority'] ?? 0), $signers));
-            $signersToInvite = array_values(array_filter(
-                $signers,
-                fn (array $s): bool => (int) ($s['priority'] ?? 0) === $firstPriority,
-            ));
-        }
-
-        $notificationsUrl = sprintf('%s/api/notifications/email', rtrim($this->baseUrl, '/'));
-
-        foreach ($signersToInvite as $signer) {
-            $delegate = is_array($signer['delegate'] ?? null) ? $signer['delegate'] : null;
-            $email = (string) ($delegate['email'] ?? $signer['email'] ?? '');
-            $signUrl = (string) ($signer['signing_url'] ?? '');
-
-            if ($email === '' || $signUrl === '') {
-                continue;
-            }
-
-            $recipientName = $delegate
-                ? trim((string) ($delegate['name'] ?? $delegate['email'] ?? ''))
-                : trim((string) ($signer['full_name'] ?? ''));
-
-            $payload = EnvelopeInvitationEmail::build(
-                recipientEmail: $email,
-                documentName: $documentName,
-                senderName: $this->initiatorName,
-                signUrl: $signUrl,
-                accessCode: isset($signer['dev_otp_code']) ? (string) $signer['dev_otp_code'] : null,
-                recipientName: $recipientName !== '' ? $recipientName : null,
-            );
-
-            try {
-                HttpClient::postJson($notificationsUrl, $payload, $this->apiToken);
-            } catch (\Throwable) {
-                // Best-effort, same as the web client.
-            }
-        }
+        return HttpClient::postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
+            'email' => $recipientEmail,
+            'subject' => $subject,
+            'body' => $emailTemplate->toHtml(),
+        ], $this->apiToken);
     }
 }
