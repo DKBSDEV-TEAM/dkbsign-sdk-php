@@ -63,9 +63,10 @@ $response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
 
 Use a fresh `DKBSign` instance (or rebuild the fluent chain) before each sign request so page and file state from a previous call is not reused.
 
-### Create an envelope (multi-signer)
+### Send an envelope (two steps)
 
-`envelopes()` only creates the batch on the signature API. It does **not** send emails.
+1. Create the batch (`envelopes()`).
+2. Queue invitation email(s) (`sendInvitation()`), using each signer's `signing_url` from step 1.
 
 ```php
 <?php
@@ -74,11 +75,13 @@ use DKBSign\DKBSign;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Enums\SignatureType;
+use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Position;
 use DKBSign\Support\Signer;
 
 $client = new DKBSign('https://api.dkbsigns.com', 'your-api-token');
 
+// Step 1: create the envelope (does not send email)
 $envelope = $client
     ->setDocuments(['/path/to/nda.pdf'])
     ->setEnvelopeTitle('NDA')
@@ -108,15 +111,8 @@ $envelope = $client
 
 // $envelope->statusCode === 201
 // $envelope->body['batch_id'], $envelope->body['signers'][…]['signing_url'], …
-```
 
-### Send a signing invitation email
-
-Use `sendInvitation()` with the notifications API (`202` when queued). Pass each signer's `signing_url` from the envelope response (or your own link).
-
-```php
-use DKBSign\Support\EmailTemplate;
-
+// Step 2: notify signers (202 = queued for delivery)
 $signer = $envelope->body['signers'][0];
 
 $queued = $client->sendInvitation(
@@ -130,7 +126,7 @@ $queued = $client->sendInvitation(
 
 `EmailTemplate` renders a small default HTML body with a sign link. Pass a custom HTML string as the second constructor argument to override it.
 
-For **ordered** signing, invite only signers at the current priority first; after each signature, the platform notifies the next group. For **`any`**, you can invite everyone when the envelope is created.
+For **ordered** signing, run step 2 only for signers at the current priority; the platform invites the next group after each signature. For **`any`**, you can invite everyone right after step 1.
 
 ## How it works
 
