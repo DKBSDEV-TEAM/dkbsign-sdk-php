@@ -15,6 +15,14 @@ PHP client library for the [DKBSign](https://api.dkbsigns.com) electronic signat
 composer require dkbs/dkbsign-sdk-php
 ```
 
+### Contribution
+
+```bash
+git clone git@github.com:DKBSDEV-TEAM/dkbsign-sdk-php.git
+cd dkbsign-sdk-php
+composer install
+```
+
 ## Quick start
 
 You need a **base URL** (for example `https://api.dkbsigns.com`) and an **API bearer token** from your DKBSign account.
