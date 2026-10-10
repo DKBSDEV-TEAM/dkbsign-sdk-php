@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace DKBSign\Support;
 
-use DKBSign\Enums\SignatureType;
+use DKBSign\Enums\FieldType;
 
-final class Signature
+final class Field
 {
     public ?Position $position = null;
 
@@ -15,7 +15,7 @@ final class Signature
     public ?string $text = null;
 
     public function __construct(
-        public string $type = SignatureType::SIGNATURE->value
+        public string $type = FieldType::SIGNATURE->value
     ) {}
 
     public function usePosition(Position $position): self
