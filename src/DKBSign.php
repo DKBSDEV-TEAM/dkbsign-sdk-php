@@ -8,9 +8,11 @@ use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Services\HttpClient;
 use DKBSign\Services\HttpResponse;
+use DKBSign\Support\Anchor;
 use DKBSign\Support\EmailTemplate;
+use DKBSign\Support\Field;
 use DKBSign\Support\Position;
-use DKBSign\Support\Signature;
+use DKBSign\Support\QualifiedSigner;
 use DKBSign\Support\Signer;
 use GuzzleHttp\Psr7\Utils;
 
@@ -35,13 +37,25 @@ final class DKBSign
     protected array $documents;
 
     /**
+     * @var array<int, array<int, string>>
+     */
+    protected array $attachments = [];
+
+    protected array $qualifiedSigner;
+
+    /**
      * @var array<int, Signer>;
      */
     protected array $signers = [];
 
     protected string $initiatorName = 'DKBSIGN';
 
-    public function __construct(public string $baseUrl, public string $apiToken) {}
+    protected HttpClient $httpClient;
+
+    public function __construct(public string $baseUrl, public string $apiToken)
+    {
+        $this->httpClient = new HttpClient($apiToken);
+    }
 
     public function setInitiatorName(string $initiatorName): self
     {
@@ -93,22 +107,85 @@ final class DKBSign
     }
 
     /**
-     * @param  array<int, Signature>  $signatures
+     * Advisory files stored with one document. They are not signed.
+     *
+     * @param  array<int, string>  $paths
      */
-    public function addSignature(int $page, array $signatures): self
+    public function setAttachments(int $documentIndex, array $paths): self
     {
-        $this->pages[] = [
-            'page' => $page,
-            'signatures' => array_map(fn (Signature $signature) => [
-                'x' => $signature->position->x,
-                'y' => $signature->position->y,
-                'width' => $signature->position->width,
-                'height' => $signature->position->height,
-                'type' => $signature->type,
-            ], $signatures),
+        $this->attachments[$documentIndex] = $paths;
+
+        return $this;
+    }
+
+    public function setQualifiedSigner(QualifiedSigner $signer): self
+    {
+        $this->qualifiedSigner = [
+            'first_name' => $signer->firstName,
+            'last_name' => $signer->lastName,
+            'email' => $signer->email,
+            'phone' => $signer->phone,
+            'id_card' => [
+                'document_type' => $signer->identityDocument->type,
+                'document_number' => $signer->identityDocument->number,
+            ],
+            'reason' => $signer->reason,
         ];
 
         return $this;
+    }
+
+    /**
+     * @param  array<int, Field>  $fields
+     */
+    public function addField(int $page, array $fields): self
+    {
+        $this->pages[] = [
+            'page' => $page,
+            'signatures' => array_map(
+                fn (Field $field) => $this->buildFieldMark($field),
+                $fields
+            ),
+        ];
+
+        return $this;
+    }
+
+    /**
+     * A mark is either coordinates (`x`/`y`) or printed text (`anchor`).
+     *
+     * @return array<string, float|int|string>
+     */
+    protected function buildFieldMark(Field $field): array
+    {
+        if ($field->anchor instanceof Anchor) {
+            $mark = [
+                'anchor' => $field->anchor->name,
+                'width' => $field->anchor->width,
+                'height' => $field->anchor->height,
+                'type' => $field->type,
+            ];
+
+            if ($field->anchor->occurrence !== null) {
+                $mark['occurrence'] = $field->anchor->occurrence;
+            }
+        } elseif ($field->position instanceof Position) {
+            $mark = [
+                'x' => $field->position->x,
+                'y' => $field->position->y,
+                'width' => $field->position->width,
+                'height' => $field->position->height,
+                'type' => $field->type,
+            ];
+        } else {
+            throw new \InvalidArgumentException('A signature needs a position or an anchor.');
+        }
+
+        if ($field->text !== null) {
+            $mark['text'] = $field->text;
+        }
+
+        return $mark;
     }
 
     /**
@@ -117,7 +194,7 @@ final class DKBSign
      *
      * @param  array<int, Position>  $positions
      */
-    protected function buildSignerPositions(array $positions): \stdClass
+    protected function buildSignerPositions(array $positions, ?Anchor $anchor = null): \stdClass
     {
         $grouped = [];
 
@@ -130,8 +207,32 @@ final class DKBSign
                 'y' => $position->y,
                 'width' => $position->width,
                 'height' => $position->height,
-                'type' => $position->signatureType,
+                'type' => $position->fieldType,
             ];
+        }
+
+        if ($anchor instanceof Anchor) {
+            $documentIndex = (string) $anchor->documentIndex;
+            $grouped[$documentIndex] ??= [];
+            $mark = [
+                'anchor' => $anchor->name,
+                'width' => $anchor->width,
+                'height' => $anchor->height,
+            ];
+
+            if ($anchor->page !== null) {
+                $mark['page'] = $anchor->page;
+            }
+
+            if ($anchor->fieldType !== null) {
+                $mark['type'] = $anchor->fieldType;
+            }
+
+            if ($anchor->occurrence !== null) {
+                $mark['occurrence'] = $anchor->occurrence;
+            }
+
+            $grouped[$documentIndex][] = $mark;
         }
 
         return (object) $grouped;
@@ -140,7 +241,7 @@ final class DKBSign
     /**
      * @param  array<int, Signer>  $signers
      */
-    public function addSigner(array $signers): self
+    public function setSigners(array $signers): self
     {
         foreach ($signers as $signer) {
             $this->signers[] = [
@@ -149,7 +250,7 @@ final class DKBSign
                 'email' => $signer->email,
                 'phone' => $signer->phone,
                 'priority' => $signer->priority,
-                'positions' => $this->buildSignerPositions($signer->positions),
+                'positions' => $this->buildSignerPositions($signer->positions, $signer->anchor),
             ];
         }
 
@@ -167,7 +268,7 @@ final class DKBSign
     {
         $url = sprintf('%s/api/v4/sign', $this->baseUrl);
 
-        return HttpClient::post($url, [
+        return $this->httpClient->post($url, [
             [
                 'name' => 'file',
                 'contents' => Utils::tryFopen($this->file, 'r'),
@@ -186,12 +287,12 @@ final class DKBSign
                 'name' => 'signature_image',
                 'contents' => Utils::tryFopen($this->signatureImage, 'r'),
             ],
-        ], $this->apiToken);
+        ]);
     }
 
     public function sendOtp(): HttpResponse
     {
-        return HttpClient::postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl), bearerToken: $this->apiToken);
+        return $this->httpClient->postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl));
     }
 
     public function envelopes(): HttpResponse
@@ -208,7 +309,17 @@ final class DKBSign
             ];
         }
 
-        $response = HttpClient::post($url, [
+        foreach ($this->attachments as $documentIndex => $paths) {
+            foreach ($paths as $path) {
+                $documents[] = [
+                    'name' => 'attachments_'.$documentIndex.'[]',
+                    'contents' => Utils::tryFopen($path, 'r'),
+                    'filename' => basename($path),
+                ];
+            }
+        }
+
+        $response = $this->httpClient->post($url, [
             ...$documents,
 
             [
@@ -221,17 +332,84 @@ final class DKBSign
                     'signers' => $this->signers,
                 ]),
             ],
-        ], $this->apiToken);
+        ]);
 
         return $response;
     }
 
+    public function listSignedDocuments(?string $status = null, int $page = 1, int $perPage = 20): HttpResponse
+    {
+        $query = [
+            'page' => $page,
+            'per_page' => $perPage,
+        ];
+
+        if ($status !== null && $status !== '') {
+            $query['status'] = $status;
+        }
+
+        return $this->httpClient->get(
+            sprintf('%s/api/v4/documents', $this->baseUrl),
+            $query,
+        );
+    }
+
+    public function verifyDocument(string $uuid): HttpResponse
+    {
+        return $this->httpClient->get(
+            sprintf('%s/api/v4/verify/%s', $this->baseUrl, rawurlencode($uuid)),
+            ['format' => 'json']
+        );
+    }
+
+    public function listSentEnvelopes(): HttpResponse
+    {
+        return $this->httpClient->get(sprintf('%s/api/v4/envelopes', $this->baseUrl));
+    }
+
+    public function listReceivedEnvelopes(): HttpResponse
+    {
+        return $this->httpClient->get(sprintf('%s/api/v4/envelopes/received', $this->baseUrl));
+    }
+
     public function sendInvitation(string $recipientEmail, string $subject, EmailTemplate $emailTemplate): HttpResponse
     {
-        return HttpClient::postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
+        return $this->httpClient->postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
             'email' => $recipientEmail,
             'subject' => $subject,
             'body' => $emailTemplate->toHtml(),
-        ], $this->apiToken);
+        ]);
+    }
+
+    public function qualified(): HttpResponse
+    {
+        $url = sprintf('%s/api/v4/sign/qualified', $this->baseUrl);
+
+        $parts = [
+            [
+                'name' => 'file',
+                'contents' => Utils::tryFopen($this->file, 'r'),
+                'filename' => basename($this->file),
+            ],
+            [
+                'name' => 'payload',
+                'contents' => json_encode([
+                    'signer' => $this->qualifiedSigner,
+                    'params' => [
+                        'pages' => $this->pages,
+                    ],
+                ]),
+            ],
+        ];
+
+        if (isset($this->signatureImage) && $this->signatureImage !== '') {
+            $parts[] = [
+                'name' => 'signature_image',
+                'contents' => Utils::tryFopen($this->signatureImage, 'r'),
+                'filename' => basename($this->signatureImage),
+            ];
+        }
+
+        return $this->httpClient->post($url, $parts);
     }
 }

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace DKBSign\Enums;
 
-enum SignatureType: string
+enum FieldType: string
 {
     case SIGNATURE = 'signature';
 
