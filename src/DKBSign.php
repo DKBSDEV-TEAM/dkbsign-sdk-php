@@ -10,9 +10,9 @@ use DKBSign\Services\HttpClient;
 use DKBSign\Services\HttpResponse;
 use DKBSign\Support\Anchor;
 use DKBSign\Support\EmailTemplate;
+use DKBSign\Support\Field;
 use DKBSign\Support\Position;
 use DKBSign\Support\QualifiedSigner;
-use DKBSign\Support\Signature;
 use DKBSign\Support\Signer;
 use GuzzleHttp\Psr7\Utils;
 
@@ -35,6 +35,8 @@ final class DKBSign
     protected string $signatureOrder = SignatureOrder::ORDERED->value;
 
     protected array $documents;
+
+    protected array $qualifiedSigner;
 
     /**
      * @var array<int, Signer>;
@@ -94,16 +96,33 @@ final class DKBSign
         return $this;
     }
 
+    public function setQualifiedSigner(QualifiedSigner $signer): self
+    {
+        $this->qualifiedSigner = [
+            'first_name' => $signer->firstName,
+            'last_name' => $signer->lastName,
+            'email' => $signer->email,
+            'phone' => $signer->phone,
+            'id_card' => [
+                'document_type' => $signer->identityDocument->type,
+                'document_number' => $signer->identityDocument->number,
+            ],
+            'reason' => $signer->reason,
+        ];
+
+        return $this;
+    }
+
     /**
-     * @param  array<int, Signature>  $signatures
+     * @param  array<int, Field>  $fields
      */
-    public function addSignature(int $page, array $signatures): self
+    public function addField(int $page, array $fields): self
     {
         $this->pages[] = [
             'page' => $page,
             'signatures' => array_map(
-                fn (Signature $signature) => $this->buildSignatureMark($signature),
-                $signatures
+                fn (Field $field) => $this->buildFieldMark($field),
+                $fields
             ),
         ];
 
@@ -115,33 +134,33 @@ final class DKBSign
      *
      * @return array<string, float|int|string>
      */
-    protected function buildSignatureMark(Signature $signature): array
+    protected function buildFieldMark(Field $field): array
     {
-        if ($signature->anchor instanceof Anchor) {
+        if ($field->anchor instanceof Anchor) {
             $mark = [
-                'anchor' => $signature->anchor->name,
-                'width' => $signature->anchor->width,
-                'height' => $signature->anchor->height,
-                'type' => $signature->type,
+                'anchor' => $field->anchor->name,
+                'width' => $field->anchor->width,
+                'height' => $field->anchor->height,
+                'type' => $field->type,
             ];
 
-            if ($signature->anchor->occurrence !== null) {
-                $mark['occurrence'] = $signature->anchor->occurrence;
+            if ($field->anchor->occurrence !== null) {
+                $mark['occurrence'] = $field->anchor->occurrence;
             }
-        } elseif ($signature->position instanceof Position) {
+        } elseif ($field->position instanceof Position) {
             $mark = [
-                'x' => $signature->position->x,
-                'y' => $signature->position->y,
-                'width' => $signature->position->width,
-                'height' => $signature->position->height,
-                'type' => $signature->type,
+                'x' => $field->position->x,
+                'y' => $field->position->y,
+                'width' => $field->position->width,
+                'height' => $field->position->height,
+                'type' => $field->type,
             ];
         } else {
             throw new \InvalidArgumentException('A signature needs a position or an anchor.');
         }
 
-        if ($signature->text !== null) {
-            $mark['text'] = $signature->text;
+        if ($field->text !== null) {
+            $mark['text'] = $field->text;
         }
 
         return $mark;
@@ -166,7 +185,7 @@ final class DKBSign
                 'y' => $position->y,
                 'width' => $position->width,
                 'height' => $position->height,
-                'type' => $position->signatureType,
+                'type' => $position->fieldType,
             ];
         }
 
@@ -183,8 +202,8 @@ final class DKBSign
                 $mark['page'] = $anchor->page;
             }
 
-            if ($anchor->signatureType !== null) {
-                $mark['type'] = $anchor->signatureType;
+            if ($anchor->fieldType !== null) {
+                $mark['type'] = $anchor->fieldType;
             }
 
             if ($anchor->occurrence !== null) {
@@ -200,7 +219,7 @@ final class DKBSign
     /**
      * @param  array<int, Signer>  $signers
      */
-    public function addSigner(array $signers): self
+    public function setSigners(array $signers): self
     {
         foreach ($signers as $signer) {
             $this->signers[] = [
@@ -295,27 +314,9 @@ final class DKBSign
         ], $this->apiToken);
     }
 
-    public function qualified(QualifiedSigner $signer): HttpResponse
+    public function qualified(): HttpResponse
     {
         $url = sprintf('%s/api/v4/sign/qualified', $this->baseUrl);
-
-        $signerPayload = [
-            'first_name' => $signer->firstName,
-            'last_name' => $signer->lastName,
-            'email' => $signer->email,
-            'id_card' => [
-                'document_type' => $signer->identityDocument->type,
-                'document_number' => $signer->identityDocument->number,
-            ],
-        ];
-
-        if ($signer->phone !== null && $signer->phone !== '') {
-            $signerPayload['phone'] = $signer->phone;
-        }
-
-        if ($signer->reason !== null && $signer->reason !== '') {
-            $signerPayload['reason'] = $signer->reason;
-        }
 
         $parts = [
             [
@@ -326,7 +327,7 @@ final class DKBSign
             [
                 'name' => 'payload',
                 'contents' => json_encode([
-                    'signer' => $signerPayload,
+                    'signer' => $this->qualifiedSigner,
                     'params' => [
                         'pages' => $this->pages,
                     ],

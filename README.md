@@ -239,7 +239,7 @@ $response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
 Multipart parts:
 
 1. **`file`** — PDF stream
-2. **`payload`** — JSON: `signer` (`first_name`, `last_name`, `email`, `id_card.document_type`, `id_card.document_number`, optional `phone` and `reason`) and `params.pages`
+2. **`payload`** — JSON: `signer` (`first_name`, `last_name`, `email`, `phone`, `reason`, `id_card.document_type`, `id_card.document_number`) and `params.pages`
 3. **`signature_image`** — optional PNG or JPEG; only marks of type `signature` use it
 
 `id_card.document_type` is `cni` or `passport` (`DocumentType`). The response masks the identity number to its last four digits.

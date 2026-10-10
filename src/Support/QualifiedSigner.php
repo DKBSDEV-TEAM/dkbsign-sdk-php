@@ -11,7 +11,7 @@ final class QualifiedSigner
         public string $lastName,
         public string $email,
         public IdentityDocument $identityDocument,
-        public ?string $phone = null,
-        public ?string $reason = null,
+        public string $phone,
+        public string $reason,
     ) {}
 }

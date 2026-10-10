@@ -11,7 +11,7 @@ final class Anchor
         public float $width,
         public float $height,
         public ?float $page = null,
-        public ?string $signatureType = null,
+        public ?string $fieldType = null,
         public int $documentIndex = 0,
         public ?int $occurrence = null,
     ) {}
