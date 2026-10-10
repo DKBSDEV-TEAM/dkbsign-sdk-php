@@ -3,11 +3,15 @@
 declare(strict_types=1);
 
 use DKBSign\DKBSign;
+use DKBSign\Enums\DocumentType;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Enums\SignatureType;
+use DKBSign\Support\Anchor;
 use DKBSign\Support\EmailTemplate;
+use DKBSign\Support\IdentityDocument;
 use DKBSign\Support\Position;
+use DKBSign\Support\QualifiedSigner;
 use DKBSign\Support\Signature;
 use DKBSign\Support\Signer;
 use Faker\Factory;
@@ -41,7 +45,7 @@ final class SignatureTest extends TestCase
         $this->email = getenv('DKBSIGN_TEST_EMAIL') ?: '';
         $this->filePath = getenv('DKBSIGN_TEST_PDF') ?: '';
         $this->signaturePath = getenv('DKBSIGN_TEST_SIGNATURE_IMAGE') ?: '';
-        $this->otpCode = (int) getenv('DKBSIGN_TEST_OTP') ?: 00000;
+        $this->otpCode = 522872;
 
         if ($this->apiToken === '' || $this->email === '' || $this->filePath === '' || $this->signaturePath === '') {
             $this->markTestSkipped(
@@ -65,17 +69,99 @@ final class SignatureTest extends TestCase
             ->setSignatureImage($this->signaturePath)
             ->setSignatureLevel(SignatureLevel::SIMPLE->value)
             ->addSignature(0, [
-                new Signature(
-                    position: new Position(
-                        x: 120,
-                        y: 200,
-                        width: 200,
-                        height: 70,
+                new Signature(SignatureType::SIGNATURE->value)
+                    ->usePosition(
+                        new Position(
+                            x: 120,
+                            y: 200,
+                            width: 200,
+                            height: 70,
+                        )
                     ),
-                    type: SignatureType::SIGNATURE->value
-                ),
             ])
             ->selfSign($this->otpCode);
+
+        $this->assertTrue($response->statusCode === 200);
+    }
+
+    public function test_can_self_sign_with_anchor(): void
+    {
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->setFile(getenv('DKBSIGN_TEST_PDF_WITH_ANCRAGE'))
+            ->setSignatureImage($this->signaturePath)
+            ->setSignatureLevel(SignatureLevel::SIMPLE->value)
+            ->addSignature(0, [
+                new Signature(SignatureType::SIGNATURE->value)
+                    ->useAnchor(
+                        new Anchor(
+                            name: '{{signature}}',
+                            width: 200,
+                            height: 70,
+                        )
+                    ),
+            ])
+            ->selfSign($this->otpCode);
+
+        $this->assertTrue($response->statusCode === 200);
+    }
+
+    public function test_can_sign_qualified(): void
+    {
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->setFile(getenv('DKBSIGN_TEST_PDF_WITH_ANCRAGE'))
+            ->setSignatureImage($this->signaturePath)
+            ->addSignature(0, [
+                new Signature(SignatureType::SIGNATURE->value)
+                    ->useAnchor(
+                        new Anchor(
+                            name: '-signature-',
+                            width: 200,
+                            height: 70,
+                        )
+                    ),
+            ])
+            ->qualified(new QualifiedSigner(
+                firstName: $this->faker->firstName,
+                lastName: $this->faker->lastName,
+                email: $this->email,
+                identityDocument: new IdentityDocument(
+                    type: DocumentType::CNI->value,
+                    number: 'CI000000000000',
+                ),
+                phone: getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: null,
+                reason: 'Acceptation du contrat',
+            ));
+
+        $this->assertTrue($response->statusCode === 200);
+    }
+
+    public function test_can_sign_qualified_with_position(): void
+    {
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->setFile($this->filePath)
+            ->setSignatureImage($this->signaturePath)
+            ->addSignature(0, [
+                new Signature(SignatureType::SIGNATURE->value)
+                    ->usePosition(
+                        new Position(
+                            x: 120,
+                            y: 200,
+                            width: 200,
+                            height: 70,
+                        )
+                    ),
+            ])
+            ->qualified(new QualifiedSigner(
+                firstName: $this->faker->firstName,
+                lastName: $this->faker->lastName,
+                email: $this->email,
+                identityDocument: new IdentityDocument(
+                    type: DocumentType::CNI->value,
+                    number: 'CI000000000000',
+                ),
+                phone: getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: null,
+                reason: 'Acceptation du contrat',
+            ));
 
         $this->assertTrue($response->statusCode === 200);
     }

@@ -8,8 +8,10 @@ use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Services\HttpClient;
 use DKBSign\Services\HttpResponse;
+use DKBSign\Support\Anchor;
 use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Position;
+use DKBSign\Support\QualifiedSigner;
 use DKBSign\Support\Signature;
 use DKBSign\Support\Signer;
 use GuzzleHttp\Psr7\Utils;
@@ -99,16 +101,50 @@ final class DKBSign
     {
         $this->pages[] = [
             'page' => $page,
-            'signatures' => array_map(fn (Signature $signature) => [
+            'signatures' => array_map(
+                fn (Signature $signature) => $this->buildSignatureMark($signature),
+                $signatures
+            ),
+        ];
+
+        return $this;
+    }
+
+    /**
+     * A mark is either coordinates (`x`/`y`) or printed text (`anchor`).
+     *
+     * @return array<string, float|int|string>
+     */
+    protected function buildSignatureMark(Signature $signature): array
+    {
+        if ($signature->anchor instanceof Anchor) {
+            $mark = [
+                'anchor' => $signature->anchor->name,
+                'width' => $signature->anchor->width,
+                'height' => $signature->anchor->height,
+                'type' => $signature->type,
+            ];
+
+            if ($signature->anchor->occurrence !== null) {
+                $mark['occurrence'] = $signature->anchor->occurrence;
+            }
+        } elseif ($signature->position instanceof Position) {
+            $mark = [
                 'x' => $signature->position->x,
                 'y' => $signature->position->y,
                 'width' => $signature->position->width,
                 'height' => $signature->position->height,
                 'type' => $signature->type,
-            ], $signatures),
-        ];
+            ];
+        } else {
+            throw new \InvalidArgumentException('A signature needs a position or an anchor.');
+        }
 
-        return $this;
+        if ($signature->text !== null) {
+            $mark['text'] = $signature->text;
+        }
+
+        return $mark;
     }
 
     /**
@@ -117,7 +153,7 @@ final class DKBSign
      *
      * @param  array<int, Position>  $positions
      */
-    protected function buildSignerPositions(array $positions): \stdClass
+    protected function buildSignerPositions(array $positions, ?Anchor $anchor = null): \stdClass
     {
         $grouped = [];
 
@@ -132,6 +168,30 @@ final class DKBSign
                 'height' => $position->height,
                 'type' => $position->signatureType,
             ];
+        }
+
+        if ($anchor instanceof Anchor) {
+            $documentIndex = (string) $anchor->documentIndex;
+            $grouped[$documentIndex] ??= [];
+            $mark = [
+                'anchor' => $anchor->name,
+                'width' => $anchor->width,
+                'height' => $anchor->height,
+            ];
+
+            if ($anchor->page !== null) {
+                $mark['page'] = $anchor->page;
+            }
+
+            if ($anchor->signatureType !== null) {
+                $mark['type'] = $anchor->signatureType;
+            }
+
+            if ($anchor->occurrence !== null) {
+                $mark['occurrence'] = $anchor->occurrence;
+            }
+
+            $grouped[$documentIndex][] = $mark;
         }
 
         return (object) $grouped;
@@ -149,7 +209,7 @@ final class DKBSign
                 'email' => $signer->email,
                 'phone' => $signer->phone,
                 'priority' => $signer->priority,
-                'positions' => $this->buildSignerPositions($signer->positions),
+                'positions' => $this->buildSignerPositions($signer->positions, $signer->anchor),
             ];
         }
 
@@ -233,5 +293,55 @@ final class DKBSign
             'subject' => $subject,
             'body' => $emailTemplate->toHtml(),
         ], $this->apiToken);
+    }
+
+    public function qualified(QualifiedSigner $signer): HttpResponse
+    {
+        $url = sprintf('%s/api/v4/sign/qualified', $this->baseUrl);
+
+        $signerPayload = [
+            'first_name' => $signer->firstName,
+            'last_name' => $signer->lastName,
+            'email' => $signer->email,
+            'id_card' => [
+                'document_type' => $signer->identityDocument->type,
+                'document_number' => $signer->identityDocument->number,
+            ],
+        ];
+
+        if ($signer->phone !== null && $signer->phone !== '') {
+            $signerPayload['phone'] = $signer->phone;
+        }
+
+        if ($signer->reason !== null && $signer->reason !== '') {
+            $signerPayload['reason'] = $signer->reason;
+        }
+
+        $parts = [
+            [
+                'name' => 'file',
+                'contents' => Utils::tryFopen($this->file, 'r'),
+                'filename' => basename($this->file),
+            ],
+            [
+                'name' => 'payload',
+                'contents' => json_encode([
+                    'signer' => $signerPayload,
+                    'params' => [
+                        'pages' => $this->pages,
+                    ],
+                ]),
+            ],
+        ];
+
+        if (isset($this->signatureImage) && $this->signatureImage !== '') {
+            $parts[] = [
+                'name' => 'signature_image',
+                'contents' => Utils::tryFopen($this->signatureImage, 'r'),
+                'filename' => basename($this->signatureImage),
+            ];
+        }
+
+        return HttpClient::post($url, $parts, $this->apiToken);
     }
 }

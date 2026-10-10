@@ -16,5 +16,7 @@ final class Signer
         public string $phone,
         public int $priority,
         public array $positions,
+        public ?Anchor $anchor = null,
+        public ?string $reason = null
     ) {}
 }

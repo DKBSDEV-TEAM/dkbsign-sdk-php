@@ -56,10 +56,8 @@ $response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
     ->setSignatureImage('/path/to/signature.png')
     ->setSignatureLevel(SignatureLevel::SIMPLE->value)
     ->addSignature(0, [
-        new Signature(
-            position: new Position(x: 120, y: 200, width: 200, height: 70),
-            type: SignatureType::SIGNATURE->value,
-        ),
+        new Signature(SignatureType::SIGNATURE->value)
+            ->usePosition(new Position(x: 120, y: 200, width: 200, height: 70)),
     ])
     ->selfSign(123456);
 
@@ -142,10 +140,11 @@ For **ordered** signing, run step 2 only for signers at the current priority; th
 
 | Method                   | HTTP                                     | Purpose                                 |
 | ------------------------ | ---------------------------------------- | --------------------------------------- |
-| `sendOtp()`              | `POST {baseUrl}/api/v4/sign/otp`         | Start OTP for self-signing              |
-| `selfSign(int $otpCode)` | `POST {baseUrl}/api/v4/sign`             | Multipart: PDF, params, signature image |
-| `envelopes()`            | `POST {baseUrl}/api/v4/envelopes`        | Multipart: PDF(s) + JSON `payload`      |
-| `sendInvitation(…)`      | `POST {baseUrl}/api/notifications/email` | Queue an invitation email               |
+| `sendOtp()`                         | `POST {baseUrl}/api/v4/sign/otp`         | Start OTP for self-signing                          |
+| `selfSign(int $otpCode)`            | `POST {baseUrl}/api/v4/sign`             | Multipart: PDF, params, signature image             |
+| `qualified(QualifiedSigner $signer)` | `POST {baseUrl}/api/v4/sign/qualified`  | One-shot qualified signature for an identified person |
+| `envelopes()`                       | `POST {baseUrl}/api/v4/envelopes`        | Multipart: PDF(s) + JSON `payload`                  |
+| `sendInvitation(…)`                 | `POST {baseUrl}/api/notifications/email` | Queue an invitation email                           |
 
 ### Self-sign configuration
 
@@ -160,7 +159,20 @@ Methods return `$this` so you can chain options before `selfSign()`:
 
 Page numbers are **zero-based** (page `0` is the first page). Coordinates are in millimetres from the **bottom-left** of the page (PDF convention), matching the v4 API.
 
-Each `Signature` wraps a `Position` (`x`, `y`, `width`, `height`, optional `page`, `signatureType`) and a field `type` (see `SignatureType`).
+Each `Signature` has a field `type` (see `SignatureType`) and either a `Position` (`x`, `y`, `width`, `height`) or an `Anchor`.
+
+An anchor is text already printed in the PDF, for example `{{signature}}`. The API finds that text and places the mark on it. `Anchor::$occurrence` (0-based) keeps a single match when the text appears more than once. The page passed to `addSignature()` limits the search to that page.
+
+```php
+use DKBSign\Support\Anchor;
+
+->addSignature(0, [
+    new Signature(SignatureType::SIGNATURE->value)
+        ->useAnchor(new Anchor(name: '{{signature}}', width: 200, height: 70)),
+])
+```
+
+A `text` mark can also set `Signature::$text` (the words drawn in the box). That field is used by the qualified endpoint.
 
 ### Multipart payload (`selfSign`)
 
@@ -181,14 +193,56 @@ Chain these before `envelopes()`:
 | `setSignatureLevel(string $level)`    | Level imposed on all participants             |
 | `addSigner(Signer[] $signers)`        | Signers with contact info and field positions |
 
-Each `Signer` needs `firstName`, `lastName`, `email`, `phone` (E.164, e.g. `+225…`), `priority`, and a list of `Position` marks.
+Each `Signer` needs `firstName`, `lastName`, `email`, `phone` (E.164, e.g. `+225…`), `priority`, and a list of `Position` marks. An optional `Anchor` is sent as an extra mark: the API looks up `Anchor::$name` in the PDF instead of using `x` and `y`. Group that anchor with `Anchor::$documentIndex` (default `0`).
 
-**Positions per document:** marks are grouped by `Position::$documentIndex` (default `0` = first file in `setDocuments()`). The API expects JSON like `{"0": [{page, x, y, …}], "1": […]}`.
+**Positions per document:** marks are grouped by `Position::$documentIndex` (default `0` = first file in `setDocuments()`). The API expects JSON like `{"0": [{page, x, y, …}], "1": […]}`. An anchor mark in that map is `{"anchor": "{{signature}}", "width": …, "height": …}`.
 
 ### Multipart payload (`envelopes`)
 
 1. **`documents[]`** — one part per PDF (with filename)
 2. **`payload`** — JSON string: `title`, `message`, `signing_order`, `signature_level`, `signers`
+
+### Qualified signature (one shot)
+
+`qualified()` signs one PDF for a person your application has already identified. The API issues a short-lived certificate, signs, then discards the private key. There is no OTP and no signing link. The level is always `qualified`.
+
+Place marks with `addSignature()` (coordinates or an anchor), then pass a `QualifiedSigner`:
+
+```php
+use DKBSign\Enums\DocumentType;
+use DKBSign\Enums\SignatureType;
+use DKBSign\Support\Anchor;
+use DKBSign\Support\IdentityDocument;
+use DKBSign\Support\QualifiedSigner;
+use DKBSign\Support\Signature;
+
+$response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
+    ->setFile('/path/to/document.pdf')
+    ->setSignatureImage('/path/to/signature.png') // optional
+    ->addSignature(0, [
+        new Signature(SignatureType::SIGNATURE->value)
+            ->useAnchor(new Anchor(name: '{{signature}}', width: 200, height: 70)),
+    ])
+    ->qualified(new QualifiedSigner(
+        firstName: 'Awa',
+        lastName: 'Koné',
+        email: 'awa.kone@example.com',
+        identityDocument: new IdentityDocument(
+            type: DocumentType::CNI->value,
+            number: 'CI123456789',
+        ),
+        phone: '+2250700000000',
+        reason: 'Acceptation du contrat',
+    ));
+```
+
+Multipart parts:
+
+1. **`file`** — PDF stream
+2. **`payload`** — JSON: `signer` (`first_name`, `last_name`, `email`, `id_card.document_type`, `id_card.document_number`, optional `phone` and `reason`) and `params.pages`
+3. **`signature_image`** — optional PNG or JPEG; only marks of type `signature` use it
+
+`id_card.document_type` is `cni` or `passport` (`DocumentType`). The response masks the identity number to its last four digits.
 
 ### HTTP layer
 
@@ -208,6 +262,13 @@ Failed HTTP status codes surface as Guzzle exceptions unless you handle them aro
 | `SIMPLE`    | `simple`    |
 | `ADVANCED`  | `advanced`  |
 | `QUALIFIED` | `qualified` |
+
+### `DocumentType`
+
+| Case       | Value      |
+| ---------- | ---------- |
+| `CNI`      | `cni`      |
+| `PASSPORT` | `passport` |
 
 ### `SignatureOrder`
 
@@ -247,7 +308,9 @@ Integration tests in `tests/SignatureTest.php` call the live API. Configure cred
 | `DKBSIGN_BASE_URL`             | Optional                    | Default `https://api.dkbsigns.com` |
 | `DKBSIGN_TEST_OTP`             | Self-sign test              | Current OTP code after `sendOtp()` |
 | `DKBSIGN_TEST_SIGNER_EMAIL`    | Envelope / invitation tests | External signer inbox              |
-| `DKBSIGN_TEST_SIGNER_PHONE`    | Envelope test               | E.164 phone                        |
+| `DKBSIGN_TEST_SIGNER_PHONE`    | Envelope / qualified tests  | E.164 phone                        |
+| `DKBSIGN_TEST_ID_TYPE`         | Qualified test              | `cni` or `passport` (default `cni`) |
+| `DKBSIGN_TEST_ID_NUMBER`       | Qualified test              | Identity document number           |
 
 Run tests:
 
