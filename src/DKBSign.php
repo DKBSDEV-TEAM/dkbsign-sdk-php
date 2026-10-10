@@ -36,6 +36,11 @@ final class DKBSign
 
     protected array $documents;
 
+    /**
+     * @var array<int, array<int, string>>
+     */
+    protected array $attachments = [];
+
     protected array $qualifiedSigner;
 
     /**
@@ -45,7 +50,12 @@ final class DKBSign
 
     protected string $initiatorName = 'DKBSIGN';
 
-    public function __construct(public string $baseUrl, public string $apiToken) {}
+    protected HttpClient $httpClient;
+
+    public function __construct(public string $baseUrl, public string $apiToken)
+    {
+        $this->httpClient = new HttpClient($apiToken);
+    }
 
     public function setInitiatorName(string $initiatorName): self
     {
@@ -92,6 +102,18 @@ final class DKBSign
     public function setDocuments(array $documents): self
     {
         $this->documents = $documents;
+
+        return $this;
+    }
+
+    /**
+     * Advisory files stored with one document. They are not signed.
+     *
+     * @param  array<int, string>  $paths
+     */
+    public function setAttachments(int $documentIndex, array $paths): self
+    {
+        $this->attachments[$documentIndex] = $paths;
 
         return $this;
     }
@@ -246,7 +268,7 @@ final class DKBSign
     {
         $url = sprintf('%s/api/v4/sign', $this->baseUrl);
 
-        return HttpClient::post($url, [
+        return $this->httpClient->post($url, [
             [
                 'name' => 'file',
                 'contents' => Utils::tryFopen($this->file, 'r'),
@@ -265,12 +287,12 @@ final class DKBSign
                 'name' => 'signature_image',
                 'contents' => Utils::tryFopen($this->signatureImage, 'r'),
             ],
-        ], $this->apiToken);
+        ]);
     }
 
     public function sendOtp(): HttpResponse
     {
-        return HttpClient::postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl), bearerToken: $this->apiToken);
+        return $this->httpClient->postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl));
     }
 
     public function envelopes(): HttpResponse
@@ -287,7 +309,17 @@ final class DKBSign
             ];
         }
 
-        $response = HttpClient::post($url, [
+        foreach ($this->attachments as $documentIndex => $paths) {
+            foreach ($paths as $path) {
+                $documents[] = [
+                    'name' => 'attachments_'.$documentIndex.'[]',
+                    'contents' => Utils::tryFopen($path, 'r'),
+                    'filename' => basename($path),
+                ];
+            }
+        }
+
+        $response = $this->httpClient->post($url, [
             ...$documents,
 
             [
@@ -300,18 +332,53 @@ final class DKBSign
                     'signers' => $this->signers,
                 ]),
             ],
-        ], $this->apiToken);
+        ]);
 
         return $response;
     }
 
+    public function listSignedDocuments(?string $status = null, int $page = 1, int $perPage = 20): HttpResponse
+    {
+        $query = [
+            'page' => $page,
+            'per_page' => $perPage,
+        ];
+
+        if ($status !== null && $status !== '') {
+            $query['status'] = $status;
+        }
+
+        return $this->httpClient->get(
+            sprintf('%s/api/v4/documents', $this->baseUrl),
+            $query,
+        );
+    }
+
+    public function verifyDocument(string $uuid): HttpResponse
+    {
+        return $this->httpClient->get(
+            sprintf('%s/api/v4/verify/%s', $this->baseUrl, rawurlencode($uuid)),
+            ['format' => 'json']
+        );
+    }
+
+    public function listSentEnvelopes(): HttpResponse
+    {
+        return $this->httpClient->get(sprintf('%s/api/v4/envelopes', $this->baseUrl));
+    }
+
+    public function listReceivedEnvelopes(): HttpResponse
+    {
+        return $this->httpClient->get(sprintf('%s/api/v4/envelopes/received', $this->baseUrl));
+    }
+
     public function sendInvitation(string $recipientEmail, string $subject, EmailTemplate $emailTemplate): HttpResponse
     {
-        return HttpClient::postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
+        return $this->httpClient->postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
             'email' => $recipientEmail,
             'subject' => $subject,
             'body' => $emailTemplate->toHtml(),
-        ], $this->apiToken);
+        ]);
     }
 
     public function qualified(): HttpResponse
@@ -343,6 +410,6 @@ final class DKBSign
             ];
         }
 
-        return HttpClient::post($url, $parts, $this->apiToken);
+        return $this->httpClient->post($url, $parts);
     }
 }

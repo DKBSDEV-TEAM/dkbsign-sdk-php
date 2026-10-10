@@ -31,4 +31,11 @@ final class Field
 
         return $this;
     }
+
+    public function setText(string $text): self
+    {
+        $this->text = $text;
+
+        return $this;
+    }
 }
