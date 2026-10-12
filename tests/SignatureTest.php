@@ -7,12 +7,12 @@ use DKBSign\Enums\DocumentType;
 use DKBSign\Enums\FieldType;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
+use DKBSign\Services\HttpResponse;
 use DKBSign\Support\Anchor;
 use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Field;
 use DKBSign\Support\IdentityDocument;
 use DKBSign\Support\Position;
-use DKBSign\Services\HttpResponse;
 use DKBSign\Support\QualifiedSigner;
 use DKBSign\Support\Signer;
 use Faker\Factory;
@@ -49,7 +49,7 @@ final class SignatureTest extends TestCase
         $this->filePath = getenv('DKBSIGN_TEST_PDF') ?: '';
         $this->signaturePath = getenv('DKBSIGN_TEST_SIGNATURE_IMAGE') ?: '';
         $this->attachmentPath = getenv('DKBSIGN_TEST_PDF_ATTACHMENT') ?: '';
-        $this->otpCode = 522872;
+        $this->otpCode = (int) getenv('DKBSIGN_TEST_OTP') ?: 000000;
 
         if ($this->apiToken === '' || $this->email === '' || $this->filePath === '' || $this->signaturePath === '') {
             $this->markTestSkipped(
