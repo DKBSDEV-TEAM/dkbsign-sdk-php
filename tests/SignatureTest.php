@@ -113,6 +113,8 @@ final class SignatureTest extends TestCase
 
     public function test_can_sign_qualified(): void
     {
+        $signerEmail = getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: $this->faker->email;
+
         $response = new DKBSign($this->baseUrl, $this->apiToken)
             ->setFile(getenv('DKBSIGN_TEST_PDF_WITH_ANCHOR'))
             ->setSignatureImage($this->signaturePath)
@@ -130,7 +132,7 @@ final class SignatureTest extends TestCase
                 new QualifiedSigner(
                     firstName: $firstName = $this->faker->firstName,
                     lastName: $lastName = $this->faker->lastName,
-                    email: $this->email,
+                    email: $signerEmail,
                     identityDocument: new IdentityDocument(
                         type: DocumentType::CNI->value,
                         number: 'CI000000000000',
@@ -141,11 +143,13 @@ final class SignatureTest extends TestCase
             )
             ->qualified();
 
-        $this->assertQualifiedSignature($response, $firstName, $lastName);
+        $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
 
     public function test_can_sign_qualified_with_position(): void
     {
+        $signerEmail = getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: $this->faker->email;
+
         $response = new DKBSign($this->baseUrl, $this->apiToken)
             ->setFile($this->filePath)
             ->setSignatureImage($this->signaturePath)
@@ -164,7 +168,7 @@ final class SignatureTest extends TestCase
                 new QualifiedSigner(
                     firstName: $firstName = $this->faker->firstName,
                     lastName: $lastName = $this->faker->lastName,
-                    email: $this->email,
+                    email: getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: $this->faker->email,
                     identityDocument: new IdentityDocument(
                         type: DocumentType::CNI->value,
                         number: 'CI000000000000',
@@ -175,7 +179,7 @@ final class SignatureTest extends TestCase
             )
             ->qualified();
 
-        $this->assertQualifiedSignature($response, $firstName, $lastName);
+        $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
 
     public function test_can_create_envelope(): void
@@ -318,6 +322,8 @@ final class SignatureTest extends TestCase
 
     public function test_can_sign_qualified_with_multiple_fields(): void
     {
+        $signerEmail = getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: $this->faker->email;
+
         $response = new DKBSign($this->baseUrl, $this->apiToken)
             ->setFile($this->filePath)
             ->setSignatureImage($this->signaturePath)
@@ -332,7 +338,7 @@ final class SignatureTest extends TestCase
                 new QualifiedSigner(
                     firstName: $firstName = $this->faker->firstName,
                     lastName: $lastName = $this->faker->lastName,
-                    email: $this->email,
+                    email: $signerEmail,
                     identityDocument: new IdentityDocument(
                         type: DocumentType::CNI->value,
                         number: 'CI000000000000',
@@ -343,7 +349,7 @@ final class SignatureTest extends TestCase
             )
             ->qualified();
 
-        $this->assertQualifiedSignature($response, $firstName, $lastName);
+        $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
 
     public function test_can_send_invitation(): void
@@ -439,11 +445,11 @@ final class SignatureTest extends TestCase
         );
     }
 
-    private function assertQualifiedSignature(HttpResponse $response, string $firstName, string $lastName): void
+    private function assertQualifiedSignature(HttpResponse $response, string $firstName, string $lastName, string $email): void
     {
         $this->assertSignedPdf($response);
         $signer = $response->body['signer'];
-        $this->assertSame(strtolower($this->email), $signer['email']);
+        $this->assertSame($email, $signer['email']);
         $this->assertSame($firstName, $signer['first_name']);
         $this->assertSame($lastName, $signer['last_name']);
         $this->assertSame('Acceptation du contrat', $signer['reason']);
