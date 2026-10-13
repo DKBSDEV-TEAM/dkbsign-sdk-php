@@ -335,6 +335,18 @@ Failed HTTP status codes surface as Guzzle exceptions unless you handle them aro
 
 Qualified signing accepts `signature`, `initials`, and `text`. Envelopes and self-sign also accept the other types.
 
+## Demo
+
+`demo/index.php` is a small page with one tab per feature: OTP, self-sign, qualified signature, envelopes, invitation email, document list and verify, and sent or received envelopes. It loads `.env` then `.env.local` from the project root. The API token stays on the server.
+
+From the repository root, after `composer install` and a filled `.env`:
+
+```bash
+php -S localhost:8080 -t demo
+```
+
+Open [http://localhost:8080](http://localhost:8080). `DKBSIGN_API_TOKEN` is required. `DKBSIGN_BASE_URL` is optional (default `https://api.dkbsigns.com`). Signer email and phone fields are prefilled from `DKBSIGN_TEST_SIGNER_EMAIL` and `DKBSIGN_TEST_SIGNER_PHONE` when those are set. PDFs and signature images are uploaded in the form.
+
 ## Development
 
 Clone the repository and install dependencies:
