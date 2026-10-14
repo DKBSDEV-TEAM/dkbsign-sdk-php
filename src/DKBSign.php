@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace DKBSign;
 
+use DKBSign\Enums\NotificationChannel;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Services\HttpClient;
 use DKBSign\Services\HttpResponse;
 use DKBSign\Support\Anchor;
+use DKBSign\Support\EmailAttachment;
 use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Field;
 use DKBSign\Support\Position;
@@ -295,6 +297,59 @@ final class DKBSign
         return $this->httpClient->postJson(sprintf('%s/api/v4/sign/otp', $this->baseUrl));
     }
 
+    /**
+     * Sends a one-time code to the qualified signer. Pass that code to qualified().
+     *
+     * `email` binds the code to the signer. `channel` is `email`, `sms`, or `whatsapp`.
+     * Email uses `subject` and `body` (HTML), the same fields as sendEmail().
+     * SMS and WhatsApp use `phoneNumber` and `message` (max 255).
+     * Put `{{otp_code}}` in the text; the API replaces it with the generated code.
+     *
+     * @param  array<int, EmailAttachment>  $attachments
+     */
+    public function sendQualifiedOtp(
+        string $email,
+        string $channel = NotificationChannel::EMAIL->value,
+        ?string $subject = null,
+        ?string $body = null,
+        ?string $phoneNumber = null,
+        ?string $message = null,
+        array $attachments = [],
+    ): HttpResponse {
+        $payload = [
+            'channel' => $channel,
+            'email' => $email,
+        ];
+
+        if ($subject !== null && $subject !== '') {
+            $payload['subject'] = $subject;
+        }
+
+        if ($body !== null && $body !== '') {
+            $payload['body'] = $body;
+        }
+
+        if ($phoneNumber !== null && $phoneNumber !== '') {
+            $payload['phone_number'] = $phoneNumber;
+        }
+
+        if ($message !== null && $message !== '') {
+            $payload['message'] = $message;
+        }
+
+        if ($attachments !== []) {
+            $payload['attachments'] = array_map(
+                fn (EmailAttachment $attachment) => $attachment->toArray(),
+                $attachments
+            );
+        }
+
+        return $this->httpClient->postJson(
+            sprintf('%s/api/v4/sign/qualified/otp', $this->baseUrl),
+            $payload
+        );
+    }
+
     public function envelopes(): HttpResponse
     {
         $url = sprintf('%s/api/v4/envelopes', $this->baseUrl);
@@ -374,14 +429,55 @@ final class DKBSign
 
     public function sendInvitation(string $recipientEmail, string $subject, EmailTemplate $emailTemplate): HttpResponse
     {
-        return $this->httpClient->postJson(sprintf('%s/api/notifications/email', $this->baseUrl), [
+        return $this->sendEmail($recipientEmail, $subject, $emailTemplate->toHtml());
+    }
+
+    /**
+     * Queue an email. Attachments are optional (max 10).
+     *
+     * @param  array<int, EmailAttachment>  $attachments
+     */
+    public function sendEmail(string $recipientEmail, string $subject, string $body, array $attachments = []): HttpResponse
+    {
+        $payload = [
             'email' => $recipientEmail,
             'subject' => $subject,
-            'body' => $emailTemplate->toHtml(),
+            'body' => $body,
+        ];
+
+        if ($attachments !== []) {
+            $payload['attachments'] = array_map(
+                fn (EmailAttachment $attachment) => $attachment->toArray(),
+                $attachments
+            );
+        }
+
+        return $this->httpClient->postJson(
+            sprintf('%s/api/notifications/email', $this->baseUrl),
+            $payload
+        );
+    }
+
+    public function sendSms(string $phoneNumber, string $message): HttpResponse
+    {
+        return $this->sendPhoneNotification(NotificationChannel::SMS, $phoneNumber, $message);
+    }
+
+    public function sendWhatsapp(string $phoneNumber, string $message): HttpResponse
+    {
+        return $this->sendPhoneNotification(NotificationChannel::WHATSAPP, $phoneNumber, $message);
+    }
+
+    protected function sendPhoneNotification(NotificationChannel $channel, string $phoneNumber, string $message): HttpResponse
+    {
+        return $this->httpClient->postJson(sprintf('%s/api/notifications/sms', $this->baseUrl), [
+            'channel' => $channel->value,
+            'phone_number' => $phoneNumber,
+            'message' => $message,
         ]);
     }
 
-    public function qualified(): HttpResponse
+    public function qualified(string $otpCode): HttpResponse
     {
         $url = sprintf('%s/api/v4/sign/qualified', $this->baseUrl);
 
@@ -395,6 +491,7 @@ final class DKBSign
                 'name' => 'payload',
                 'contents' => json_encode([
                     'signer' => $this->qualifiedSigner,
+                    'otp_code' => $otpCode,
                     'params' => [
                         'pages' => $this->pages,
                     ],
