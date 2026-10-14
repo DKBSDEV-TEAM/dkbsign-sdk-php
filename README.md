@@ -1,6 +1,6 @@
 # DKBSign PHP SDK
 
-PHP client library for the [DKBSign](https://api.dkbsigns.com) electronic signature API: self-sign PDFs, create multi-signer envelopes, verify signed documents, and send notification emails through the gateway.
+PHP client library for the [DKBSign](https://api.dkbsigns.com) electronic signature API: self-sign PDFs, create multi-signer envelopes, verify signed documents, and send email, SMS, and WhatsApp notifications through the gateway.
 
 ## Requirements
 
@@ -155,13 +155,17 @@ Attachments are stored with a document and are not signed. `setAttachments($docu
 | ---------------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
 | `sendOtp()`                                    | `POST {baseUrl}/api/v4/sign/otp`          | Start OTP for self-signing                           |
 | `selfSign(int $otpCode)`                       | `POST {baseUrl}/api/v4/sign`              | Multipart: PDF, params, signature image              |
-| `qualified()`                                  | `POST {baseUrl}/api/v4/sign/qualified`    | One-shot qualified signature for an identified person |
+| `sendQualifiedOtp(string $email, …)`           | `POST {baseUrl}/api/v4/sign/qualified/otp` | OTP by email, SMS, or WhatsApp                       |
+| `qualified(string $otpCode)`                   | `POST {baseUrl}/api/v4/sign/qualified`    | One-shot qualified signature after that OTP          |
 | `envelopes()`                                  | `POST {baseUrl}/api/v4/envelopes`         | Multipart: PDF(s), attachments, JSON `payload`       |
 | `listSentEnvelopes()`                          | `GET {baseUrl}/api/v4/envelopes`          | Envelopes you created                                |
 | `listReceivedEnvelopes()`                      | `GET {baseUrl}/api/v4/envelopes/received` | Envelopes where you are a signer                     |
 | `listSignedDocuments(?string $status, …)`      | `GET {baseUrl}/api/v4/documents`          | Your documents (`status`, `page`, `per_page`)        |
 | `verifyDocument(string $uuid)`                 | `GET {baseUrl}/api/v4/verify/{uuid}`      | Public check that a document is signed               |
 | `sendInvitation(…)`                            | `POST {baseUrl}/api/notifications/email`  | Queue an invitation email                            |
+| `sendEmail(…)`                                 | `POST {baseUrl}/api/notifications/email`  | Queue an email, with optional attachments            |
+| `sendSms(…)`                                   | `POST {baseUrl}/api/notifications/sms`    | Queue an SMS (`channel` = `sms`)                     |
+| `sendWhatsapp(…)`                              | `POST {baseUrl}/api/notifications/sms`    | Queue a WhatsApp message (`channel` = `whatsapp`)    |
 
 ### Self-sign configuration
 
@@ -230,7 +234,7 @@ A successful envelope response is HTTP `201` and includes `batch_id`, `title`, `
 
 ### Qualified signature (one shot)
 
-`qualified()` signs one PDF for a person your application has already identified. Call `setQualifiedSigner()` first. The API issues a short-lived certificate, signs, then discards the private key. There is no OTP and no signing link. The level is always `qualified`.
+`qualified()` signs one PDF for a person your application has already identified. Call `sendQualifiedOtp()` first. `channel` is `email`, `sms`, or `whatsapp`. For email, pass `subject` and `body` the same way as `sendEmail()`. For SMS or WhatsApp, pass `phoneNumber` and `message` (255 characters). Write `{{otp_code}}` where the code should appear. `email` still identifies the signer: it must match the person on `qualified()`. Then call `setQualifiedSigner()` and pass the code to `qualified()`. The API checks it before issuing a short-lived certificate, signs, then discards the private key. There is no signing link. The level is always `qualified`.
 
 `phone` and `reason` are required, along with the name, email, and identity document. Marks on this endpoint are `signature`, `initials`, or `text`.
 
@@ -242,7 +246,15 @@ use DKBSign\Support\Field;
 use DKBSign\Support\IdentityDocument;
 use DKBSign\Support\QualifiedSigner;
 
-$response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
+$client = new DKBSign('https://api.dkbsigns.com', 'your-api-token');
+$client->sendQualifiedOtp(
+    email: 'awa.kone@example.com',
+    channel: 'email',
+    subject: 'Votre code de signature',
+    body: '<p>Votre code est {{otp_code}}.</p>',
+);
+
+$response = $client
     ->setFile('/path/to/document.pdf')
     ->setSignatureImage('/path/to/signature.png') // optional
     ->addField(page: 0, fields: [
@@ -260,13 +272,13 @@ $response = (new DKBSign('https://api.dkbsigns.com', 'your-api-token'))
         phone: '+2250700000000',
         reason: 'Acceptation du contrat',
     ))
-    ->qualified();
+    ->qualified('123456');
 ```
 
 Multipart parts:
 
 1. **`file`** — PDF stream
-2. **`payload`** — JSON: `signer` (`first_name`, `last_name`, `email`, `phone`, `reason`, `id_card.document_type`, `id_card.document_number`) and `params.pages`
+2. **`payload`** — JSON: `otp_code`, `signer` (`first_name`, `last_name`, `email`, `phone`, `reason`, `id_card.document_type`, `id_card.document_number`) and `params.pages`
 3. **`signature_image`** — optional PNG or JPEG; only marks of type `signature` use it
 
 `id_card.document_type` is `cni` or `passport` (`DocumentType`). The response masks the identity number to its last four digits and returns `certificate.serial` and `certificate.expires_at`.
@@ -286,6 +298,52 @@ $received = $client->listReceivedEnvelopes();
 ```
 
 `verifyDocument()` asks for JSON (`format=json`). A signed document returns `valid: true`.
+
+### Notifications
+
+Send SMS, WhatsApp, and email with the same company-user token. Delivery is asynchronous. See the [notifications guide](https://docs.dkbsigns.com/en/notifications).
+
+`POST /api/notifications/sms` queues a message and returns **202**. WhatsApp uses the same endpoint with `channel` set to `whatsapp`. `phone_number` must be E.164 and start with `+`. `message` is limited to 255 characters.
+
+```php
+$client->sendSms('+2250700000001', 'Your code is 00990');
+$client->sendWhatsapp('+2250700000001', 'Your code is 00990');
+```
+
+`POST /api/notifications/email` also returns **202**. Attachments are optional (max 10): `filename`, `content_base64`, and an optional `mime_type`. The subject is limited to 255 characters. There is no SMS-style quota on email. `sendInvitation()` renders `EmailTemplate` and calls `sendEmail()`.
+
+```php
+use DKBSign\Support\EmailAttachment;
+
+$client->sendEmail(
+    recipientEmail: 'jane@acme.test',
+    subject: 'Document ready',
+    body: '<p>Hello</p>',
+    attachments: [
+        EmailAttachment::fromPath('/path/to/signed.pdf', 'application/pdf'),
+    ],
+);
+```
+
+A queued notification returns:
+
+```json
+{ "status": "success", "message": "Notification sent successfuly" }
+```
+
+The token is gated by the company modules `email_notifications`, `sms_notifications`, and `whatsapp_notifications`. A license in read-only grace returns **403** `LICENSE_READONLY`. SMS and WhatsApp consume company quota before the job is queued. When the quota is exhausted the response is **429**:
+
+```json
+{
+  "status": "error",
+  "error_code": "SMS_QUOTA_REACHED",
+  "message": "Notification quota reached for this company",
+  "remaining": 0,
+  "limit": 1000
+}
+```
+
+WhatsApp uses `error_code` `WHATSAPP_QUOTA_REACHED`. The public API does not expose webhook subscriptions for delivery receipts. Treat **202** as accepted for delivery.
 
 ### HTTP layer
 
@@ -321,6 +379,16 @@ Failed HTTP status codes surface as Guzzle exceptions unless you handle them aro
 | `ORDERED` | `ordered` |
 | `ANY`     | `any`     |
 
+### `NotificationChannel`
+
+| Case       | Value      |
+| ---------- | ---------- |
+| `SMS`      | `sms`      |
+| `WHATSAPP` | `whatsapp` |
+| `EMAIL`    | `email`    |
+
+`sendSms()` and `sendWhatsapp()` set `channel` to `sms` or `whatsapp`. Email is a separate endpoint, so `EMAIL` is not sent on `POST /api/notifications/sms`.
+
 ### `FieldType`
 
 | Case        | Value       |
@@ -337,7 +405,7 @@ Qualified signing accepts `signature`, `initials`, and `text`. Envelopes and sel
 
 ## Demo
 
-`demo/index.php` is a small page with one tab per feature: OTP, self-sign, qualified signature, envelopes, invitation email, document list and verify, and sent or received envelopes. It loads `.env` then `.env.local` from the project root. The API token stays on the server.
+`demo/index.php` is a small page with one tab per feature: OTP, self-sign, qualified signature, envelopes, notifications (email, SMS, and WhatsApp), document list and verify, and sent or received envelopes. It loads `.env` then `.env.local` from the project root. The API token stays on the server.
 
 From the repository root, after `composer install` and a filled `.env`:
 

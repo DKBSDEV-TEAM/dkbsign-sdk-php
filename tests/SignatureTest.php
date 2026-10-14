@@ -9,6 +9,7 @@ use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Services\HttpResponse;
 use DKBSign\Support\Anchor;
+use DKBSign\Support\EmailAttachment;
 use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Field;
 use DKBSign\Support\IdentityDocument;
@@ -141,7 +142,7 @@ final class SignatureTest extends TestCase
                     reason: 'Acceptation du contrat',
                 )
             )
-            ->qualified();
+            ->qualified((string) $this->otpCode);
 
         $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
@@ -177,7 +178,7 @@ final class SignatureTest extends TestCase
                     reason: 'Acceptation du contrat',
                 )
             )
-            ->qualified();
+            ->qualified((string) $this->otpCode);
 
         $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
@@ -347,7 +348,7 @@ final class SignatureTest extends TestCase
                     reason: 'Acceptation du contrat',
                 )
             )
-            ->qualified();
+            ->qualified((string) $this->otpCode);
 
         $this->assertQualifiedSignature($response, $firstName, $lastName, $signerEmail);
     }
@@ -361,9 +362,53 @@ final class SignatureTest extends TestCase
                 emailTemplate: new EmailTemplate('https://signature.link')
             );
 
-        $this->assertSame(202, $response->statusCode);
-        $this->assertSame('success', $response->body['status']);
-        $this->assertSame('Notification sent successfuly', $response->body['message']);
+        $this->assertQueuedNotification($response);
+    }
+
+    public function test_can_send_email_with_attachment(): void
+    {
+        $recipient = getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: '';
+        if ($recipient === '') {
+            $this->markTestSkipped('Set DKBSIGN_TEST_SIGNER_EMAIL to send an email.');
+        }
+
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->sendEmail(
+                recipientEmail: $recipient,
+                subject: 'Document ready',
+                body: '<p>Hello</p>',
+                attachments: [
+                    EmailAttachment::fromPath($this->filePath, 'application/pdf'),
+                ],
+            );
+
+        $this->assertQueuedNotification($response);
+    }
+
+    public function test_can_send_sms(): void
+    {
+        $phone = getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: '';
+        if ($phone === '') {
+            $this->markTestSkipped('Set DKBSIGN_TEST_SIGNER_PHONE to send an SMS.');
+        }
+
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->sendSms($phone, 'Your code is 00990');
+
+        $this->assertQueuedNotification($response);
+    }
+
+    public function test_can_send_whatsapp(): void
+    {
+        $phone = getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: '';
+        if ($phone === '') {
+            $this->markTestSkipped('Set DKBSIGN_TEST_SIGNER_PHONE to send a WhatsApp message.');
+        }
+
+        $response = new DKBSign($this->baseUrl, $this->apiToken)
+            ->sendWhatsapp($phone, 'Your code is 00990');
+
+        $this->assertQueuedNotification($response);
     }
 
     public function test_can_list_signed_documents(): void
@@ -431,6 +476,13 @@ final class SignatureTest extends TestCase
             $this->assertIsArray($envelope['documents']);
             $this->assertArrayHasKey('can_sign', $envelope);
         }
+    }
+
+    private function assertQueuedNotification(HttpResponse $response): void
+    {
+        $this->assertSame(202, $response->statusCode);
+        $this->assertSame('success', $response->body['status']);
+        $this->assertSame('Notification sent successfuly', $response->body['message']);
     }
 
     private function assertSignedPdf(HttpResponse $response): void

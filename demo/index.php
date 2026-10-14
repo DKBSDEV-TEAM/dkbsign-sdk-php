@@ -9,6 +9,7 @@ use DKBSign\Enums\FieldType;
 use DKBSign\Enums\SignatureLevel;
 use DKBSign\Enums\SignatureOrder;
 use DKBSign\Support\Anchor;
+use DKBSign\Support\EmailAttachment;
 use DKBSign\Support\EmailTemplate;
 use DKBSign\Support\Field;
 use DKBSign\Support\IdentityDocument;
@@ -29,15 +30,32 @@ function runDemo(string $action): array
     return match ($action) {
         'otp' => respond($client->sendOtp()),
         'self-sign' => respond(selfSign($client)),
+        'qualified-otp' => respond($client->sendQualifiedOtp(
+            email: required('email'),
+            channel: posted('channel', 'email'),
+            subject: blankToNull(posted('subject')),
+            body: blankToNull(posted('body')),
+            phoneNumber: blankToNull(posted('phone_number')),
+            message: blankToNull(posted('message')),
+        )),
         'qualified' => respond(qualifiedSign($client)),
         'envelope' => respond(createEnvelope($client)),
-        'invitation' => respond($client->sendInvitation(
+        'invitation' => respond($client->sendEmail(
             recipientEmail: required('recipient_email'),
             subject: required('subject'),
-            emailTemplate: new EmailTemplate(
+            body: (new EmailTemplate(
                 signUrl: required('signing_url'),
                 template: blankToNull(posted('template')),
-            ),
+            ))->toHtml(),
+            attachments: emailAttachments(),
+        )),
+        'sms' => respond($client->sendSms(
+            phoneNumber: required('phone_number'),
+            message: required('message'),
+        )),
+        'whatsapp' => respond($client->sendWhatsapp(
+            phoneNumber: required('phone_number'),
+            message: required('message'),
         )),
         'list-documents' => respond($client->listSignedDocuments(
             status: blankToNull(posted('status')),
@@ -105,7 +123,7 @@ function qualifiedSign(DKBSign $client): HttpResponse
         $client->setSignatureImage($image);
     }
 
-    return $client->qualified();
+    return $client->qualified(required('otp_code'));
 }
 
 function createEnvelope(DKBSign $client): HttpResponse
@@ -149,6 +167,19 @@ function createEnvelope(DKBSign $client): HttpResponse
     }
 
     return $client->envelopes();
+}
+
+/**
+ * @return list<EmailAttachment>
+ */
+function emailAttachments(): array
+{
+    $path = upload('attachment', false);
+    if ($path === null) {
+        return [];
+    }
+
+    return [EmailAttachment::fromPath($path)];
 }
 
 function mark(string $type, ?string $text): Field
@@ -310,7 +341,7 @@ function checked(string $key, string $value, string $default): string
     return $current === $value ? ' checked' : '';
 }
 
-$actions = ['otp', 'self-sign', 'qualified', 'envelope', 'invitation', 'list-documents', 'verify', 'sent', 'received'];
+$actions = ['otp', 'self-sign', 'qualified-otp', 'qualified', 'envelope', 'invitation', 'sms', 'whatsapp', 'list-documents', 'verify', 'sent', 'received'];
 $result = null;
 $error = null;
 $action = '';
@@ -343,7 +374,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 $active = match ($action) {
     'list-documents', 'verify' => 'documents',
     'sent', 'received' => 'envelopes',
-    'self-sign', 'qualified', 'envelope', 'invitation' => $action,
+    'invitation', 'sms', 'whatsapp' => 'notifications',
+    'self-sign', 'qualified', 'qualified-otp', 'envelope' => $action === 'qualified-otp' ? 'qualified' : $action,
     default => 'otp',
 };
 
@@ -386,7 +418,7 @@ $tabs = [
     'self-sign' => 'Self-sign',
     'qualified' => 'Qualified',
     'envelope' => 'Envelope',
-    'invitation' => 'Invitation',
+    'notifications' => 'Notifications',
     'documents' => 'Documents',
     'envelopes' => 'Envelopes',
 ];
@@ -458,6 +490,7 @@ $tabs = [
         .panel h2 { margin: 0 0 6px; font-size: 20px; }
         .hint { margin: 0 0 16px; color: var(--muted); }
         form { display: grid; gap: 12px; }
+        form + form { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
         label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
         input, select, textarea {
@@ -569,8 +602,22 @@ $tabs = [
 
     <section class="panel" id="panel-qualified" <?= $active === 'qualified' ? '' : 'hidden' ?>>
         <h2>Qualified signature</h2>
-        <p class="hint">One-shot signature for a person you have already identified. The level is always qualified. A signature image is optional and only used by signature marks.</p>
+        <p class="hint">Two steps. First send a code on the channel you choose. Put <code>{{otp_code}}</code> in the text. Then submit the PDF with that code. The API checks it before signing. The level is always qualified. A signature image is optional and only used by signature marks.</p>
         <?= $active === 'qualified' ? $resultBlock : '' ?>
+        <form method="post">
+            <input type="hidden" name="action" value="qualified-otp">
+            <div class="grid">
+                <label>Channel
+                    <select name="channel"><?= options(['email' => 'Email', 'sms' => 'SMS', 'whatsapp' => 'WhatsApp'], posted('channel', 'email')) ?></select>
+                </label>
+                <label>Signer email<input name="email" type="email" value="<?= field('email', $signerEmail) ?>" required></label>
+                <label>Subject<input name="subject" value="<?= field('subject', 'Votre code de signature') ?>"></label>
+                <label>Phone<input name="phone_number" value="<?= field('phone_number', $signerPhone) ?>" placeholder="+225…"></label>
+            </div>
+            <label>Email body<textarea name="body" rows="4"><?= field('body', '<p>Votre code est {{otp_code}}.</p>') ?></textarea></label>
+            <label>SMS or WhatsApp message<input name="message" value="<?= field('message', 'Votre code est {{otp_code}}') ?>"></label>
+            <button type="submit">Send OTP to signer</button>
+        </form>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="qualified">
             <div class="grid">
@@ -585,6 +632,7 @@ $tabs = [
                 </label>
                 <label>Document number<input name="document_number" value="<?= field('document_number') ?>" required></label>
                 <label>Reason<input name="reason" value="<?= field('reason', 'Acceptation du contrat') ?>" required></label>
+                <label>OTP code<input name="otp_code" inputmode="numeric" value="<?= field('otp_code') ?>" required></label>
                 <label>Field type
                     <select name="field_type"><?= options($qualifiedTypes, posted('field_type', FieldType::SIGNATURE->value)) ?></select>
                 </label>
@@ -647,19 +695,36 @@ $tabs = [
         </form>
     </section>
 
-    <section class="panel" id="panel-invitation" <?= $active === 'invitation' ? '' : 'hidden' ?>>
-        <h2>Send invitation</h2>
-        <p class="hint">Queues the signing email. Paste a <code>signing_url</code> from the envelope response. Leave the HTML body empty to use the SDK default template.</p>
-        <?= $active === 'invitation' ? $resultBlock : '' ?>
-        <form method="post">
+    <section class="panel" id="panel-notifications" <?= $active === 'notifications' ? '' : 'hidden' ?>>
+        <h2>Notifications</h2>
+        <p class="hint">Same token for email, SMS, and WhatsApp. Delivery is asynchronous (HTTP 202 means accepted). SMS and WhatsApp share <code>POST /api/notifications/sms</code>; WhatsApp sets <code>channel</code> to <code>whatsapp</code>. <code>phone_number</code> is E.164 and starts with <code>+</code>. <code>message</code> is at most 255 characters. A read-only license returns 403 <code>LICENSE_READONLY</code>.</p>
+        <?= $active === 'notifications' ? $resultBlock : '' ?>
+        <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="invitation">
             <div class="grid">
                 <label>Recipient email<input name="recipient_email" type="email" value="<?= field('recipient_email', $signerEmail) ?>" required></label>
                 <label>Subject<input name="subject" value="<?= field('subject', 'Document awaiting signature') ?>" required></label>
                 <label>Signing URL<input name="signing_url" value="<?= field('signing_url') ?>" required></label>
+                <label>Attachment<input type="file" name="attachment"></label>
             </div>
             <label>Custom HTML body<textarea name="template" placeholder="optional"><?= field('template') ?></textarea></label>
             <button type="submit">Queue email</button>
+        </form>
+        <form method="post">
+            <input type="hidden" name="action" value="sms">
+            <div class="grid">
+                <label>Phone<input name="phone_number" value="<?= field('phone_number', $signerPhone) ?>" required></label>
+                <label>Message<input name="message" maxlength="255" value="<?= field('message', 'Your code is 00990') ?>" required></label>
+            </div>
+            <button type="submit">Queue SMS</button>
+        </form>
+        <form method="post">
+            <input type="hidden" name="action" value="whatsapp">
+            <div class="grid">
+                <label>Phone<input name="phone_number" value="<?= field('phone_number', $signerPhone) ?>" required></label>
+                <label>Message<input name="message" maxlength="255" value="<?= field('message', 'Your code is 00990') ?>" required></label>
+            </div>
+            <button type="submit">Queue WhatsApp</button>
         </form>
     </section>
 

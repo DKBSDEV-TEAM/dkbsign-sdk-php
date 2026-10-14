@@ -1,0 +1,663 @@
+{
+  "info": {
+    "name": "DKBSign API",
+    "description": "Requests matching the DKBSign PHP SDK (`DKBSign`).\n\nSet `baseUrl` (default `https://api.dkbsigns.com`) and `apiToken` before sending. Every request sends `Authorization: Bearer {{apiToken}}`.\n\nCoordinates are millimetres from the bottom-left of the page. Page numbers are zero-based.\n\nSuggested order: Send OTP, then Self-sign. Create an envelope, then Send invitation using `signingUrl`. SMS and WhatsApp use `signerPhone`. List documents, then Verify using `documentUuid`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.dkbsigns.com"
+    },
+    {
+      "key": "apiToken",
+      "value": ""
+    },
+    {
+      "key": "documentUuid",
+      "value": ""
+    },
+    {
+      "key": "signingUrl",
+      "value": ""
+    },
+    {
+      "key": "signerEmail",
+      "value": "jane@example.com"
+    },
+    {
+      "key": "signerPhone",
+      "value": "+2250700000001"
+    }
+  ],
+  "item": [
+    {
+      "name": "OTP",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v4/sign/otp",
+            "description": "SDK: `sendOtp()`. Starts self-signing. The code is emailed to the account behind the API token.\n\nExpect HTTP 200 with `message`, `email`, and `expires_in_minutes`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Self-sign",
+      "item": [
+        {
+          "name": "Self-sign (position)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.document_uuid) {",
+                  "    pm.collectionVariables.set('documentUuid', body.document_uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF to sign."
+                },
+                {
+                  "key": "params",
+                  "type": "text",
+                  "value": "{\n  \"pages\": [\n    {\n      \"page\": 0,\n      \"signatures\": [\n        {\n          \"x\": 120,\n          \"y\": 200,\n          \"width\": 200,\n          \"height\": 70,\n          \"type\": \"signature\"\n        }\n      ]\n    }\n  ],\n  \"signature_level\": \"simple\",\n  \"otp_code\": 123456\n}"
+                },
+                {
+                  "key": "signature_image",
+                  "type": "file",
+                  "src": "",
+                  "description": "PNG or JPEG drawn on signature marks."
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/sign",
+            "description": "SDK: `selfSign($otpCode)` after `setFile()`, `setSignatureImage()`, `setSignatureLevel()`, and `addField()`.\n\n`params` is a JSON string. `signature_level` is `simple`, `advanced`, or `qualified`. Field `type` is `signature`, `initials`, `seal`, `qrcode`, `date`, `text`, or `approval`. A `text` mark also includes `text`.\n\nReplace `otp_code` with the code from Send OTP.\n\nExpect HTTP 200 with `message`, `document_uuid`, `signed_pdf_url`, and `verification_url`. A 200 response stores `documentUuid`."
+          },
+          "response": []
+        },
+        {
+          "name": "Self-sign (anchor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.document_uuid) {",
+                  "    pm.collectionVariables.set('documentUuid', body.document_uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF that already contains the anchor text."
+                },
+                {
+                  "key": "params",
+                  "type": "text",
+                  "value": "{\n  \"pages\": [\n    {\n      \"page\": 0,\n      \"signatures\": [\n        {\n          \"anchor\": \"\\{{signature}}\",\n          \"width\": 200,\n          \"height\": 70,\n          \"type\": \"signature\",\n          \"occurrence\": 0\n        },\n        {\n          \"x\": 20,\n          \"y\": 40,\n          \"width\": 180,\n          \"height\": 40,\n          \"type\": \"text\",\n          \"text\": \"Lu et approuvé\"\n        }\n      ]\n    }\n  ],\n  \"signature_level\": \"simple\",\n  \"otp_code\": 123456\n}"
+                },
+                {
+                  "key": "signature_image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/sign",
+            "description": "Same endpoint as Self-sign (position). The API finds `anchor` text already printed in the PDF. The string must match exactly. `occurrence` is optional and zero-based when the text appears more than once. `page` limits the search to that page."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Qualified signature",
+      "item": [
+        {
+          "name": "Send qualified OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"email\",\n  \"email\": \"awa.kone@example.com\",\n  \"subject\": \"Votre code de signature\",\n  \"body\": \"<p>Votre code est {{otp_code}}.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v4/sign/qualified/otp",
+            "description": "SDK: `sendQualifiedOtp()`. Sends the code required by `qualified()`.\n\n`channel` is `email`, `sms`, or `whatsapp`. `email` identifies the signer and must match the person on the signature call.\n\nEmail uses `subject` and `body` (HTML), the same fields as `sendEmail()`. SMS and WhatsApp use `phone_number` (E.164) and `message` (max 255). Write `{{otp_code}}` where the code should appear.\n\nExpect HTTP 200 with `message`, `channel`, `email`, and `expires_in_minutes`."
+          },
+          "response": []
+        },
+        {
+          "name": "Qualified signature (position)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.document_uuid) {",
+                  "    pm.collectionVariables.set('documentUuid', body.document_uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF to sign."
+                },
+                {
+                  "key": "payload",
+                  "type": "text",
+                  "value": "{\n  \"otp_code\": \"123456\",\n  \"signer\": {\n    \"first_name\": \"Awa\",\n    \"last_name\": \"Koné\",\n    \"email\": \"awa.kone@example.com\",\n    \"phone\": \"+2250700000000\",\n    \"id_card\": {\n      \"document_type\": \"cni\",\n      \"document_number\": \"CI123456789\"\n    },\n    \"reason\": \"Acceptation du contrat\"\n  },\n  \"params\": {\n    \"pages\": [\n      {\n        \"page\": 0,\n        \"signatures\": [\n          {\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    ]\n  }\n}"
+                },
+                {
+                  "key": "signature_image",
+                  "type": "file",
+                  "src": "",
+                  "description": "Optional. Only signature marks use it. Disable this part to omit it.",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/sign/qualified",
+            "description": "SDK: `qualified($otpCode)` after `sendQualifiedOtp()`, `setFile()`, `addField()`, and `setQualifiedSigner()`. `payload.otp_code` is the code sent to `signer.email`. The level is always qualified.\n\n`phone` and `reason` are required. `id_card.document_type` is `cni` or `passport`. Marks on this endpoint are `signature`, `initials`, or `text`.\n\nExpect HTTP 200 with the signed-document fields plus `signer` (identity number masked to the last four digits) and `certificate.serial` / `certificate.expires_at`."
+          },
+          "response": []
+        },
+        {
+          "name": "Qualified signature (anchor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.document_uuid) {",
+                  "    pm.collectionVariables.set('documentUuid', body.document_uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                },
+                {
+                  "key": "payload",
+                  "type": "text",
+                  "value": "{\n  \"otp_code\": \"123456\",\n  \"signer\": {\n    \"first_name\": \"Awa\",\n    \"last_name\": \"Koné\",\n    \"email\": \"awa.kone@example.com\",\n    \"phone\": \"+2250700000000\",\n    \"id_card\": {\n      \"document_type\": \"passport\",\n      \"document_number\": \"P1234567\"\n    },\n    \"reason\": \"Acceptation du contrat\"\n  },\n  \"params\": {\n    \"pages\": [\n      {\n        \"page\": 0,\n        \"signatures\": [\n          {\n            \"anchor\": \"\\{{signature}}\",\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    ]\n  }\n}"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/sign/qualified",
+            "description": "Same endpoint as Qualified signature (position), with an anchor mark and no signature image. `payload.otp_code` is still required."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Envelopes",
+      "item": [
+        {
+          "name": "Create envelope",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "const signer = body.signers && body.signers[0];",
+                  "if (signer) {",
+                  "    if (signer.signing_url) {",
+                  "        pm.collectionVariables.set('signingUrl', signer.signing_url);",
+                  "    }",
+                  "    if (signer.email) {",
+                  "        pm.collectionVariables.set('signerEmail', signer.email);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documents[]",
+                  "type": "file",
+                  "src": "",
+                  "description": "First PDF (document index 0)."
+                },
+                {
+                  "key": "documents[]",
+                  "type": "file",
+                  "src": "",
+                  "description": "Second PDF (document index 1). Remove this part for a single document."
+                },
+                {
+                  "key": "payload",
+                  "type": "text",
+                  "value": "{\n  \"title\": \"NDA\",\n  \"message\": \"Please sign this NDA\",\n  \"signing_order\": \"ordered\",\n  \"signature_level\": \"advanced\",\n  \"signers\": [\n    {\n      \"name\": \"Doe\",\n      \"first_name\": \"Jane\",\n      \"email\": \"jane@example.com\",\n      \"phone\": \"+2250700000001\",\n      \"priority\": 1,\n      \"positions\": {\n        \"0\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ],\n        \"1\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    }\n  ]\n}"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/envelopes",
+            "description": "SDK: `envelopes()`. Creates the batch and does not send email.\n\n`signing_order` is `ordered` or `any`. `signature_level` applies to every signer. `phone` is E.164. `positions` is an object keyed by document index (`\"0\"` is the first file in `documents[]`). Field `type` matches self-sign.\n\nFor ordered signing, invite only the current priority. For `any`, invite everyone after this call.\n\nExpect HTTP 201 with `batch_id`, `title`, `documents`, and `signers` (each with `signing_url` and `status`). A 201 response stores `signingUrl` and `signerEmail` from the first signer."
+          },
+          "response": []
+        },
+        {
+          "name": "Create envelope with attachment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "const signer = body.signers && body.signers[0];",
+                  "if (signer && signer.signing_url) {",
+                  "    pm.collectionVariables.set('signingUrl', signer.signing_url);",
+                  "}",
+                  "if (signer && signer.email) {",
+                  "    pm.collectionVariables.set('signerEmail', signer.email);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "documents[]",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF to sign (document index 0)."
+                },
+                {
+                  "key": "attachments_0[]",
+                  "type": "file",
+                  "src": "",
+                  "description": "Advisory file stored with document 0. It is not signed. Use attachments_1[] for the second document."
+                },
+                {
+                  "key": "payload",
+                  "type": "text",
+                  "value": "{\n  \"title\": \"NDA\",\n  \"message\": \"Please sign this NDA\",\n  \"signing_order\": \"any\",\n  \"signature_level\": \"advanced\",\n  \"signers\": [\n    {\n      \"name\": \"Doe\",\n      \"first_name\": \"Jane\",\n      \"email\": \"jane@example.com\",\n      \"phone\": \"+2250700000001\",\n      \"priority\": 1,\n      \"positions\": {\n        \"0\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          },\n          {\n            \"anchor\": \"\\{{signature}}\",\n            \"width\": 200,\n            \"height\": 70,\n            \"page\": 0,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    }\n  ]\n}"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v4/envelopes",
+            "description": "SDK: `setAttachments($documentIndex, $paths)` adds `attachments_{index}[]`. An anchor mark omits `x` and `y`. Optional anchor fields are `page`, `type`, and `occurrence`. `documentIndex` on the anchor selects which PDF is searched (default 0)."
+          },
+          "response": []
+        },
+        {
+          "name": "List sent envelopes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v4/envelopes",
+            "description": "SDK: `listSentEnvelopes()`. Envelopes created by this account.\n\nExpect HTTP 200 with `envelopes`."
+          },
+          "response": []
+        },
+        {
+          "name": "List received envelopes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v4/envelopes/received",
+            "description": "SDK: `listReceivedEnvelopes()`. Envelopes where this account is a signer.\n\nExpect HTTP 200 with `envelopes`. Each item includes `batch_id`, `status` (`pending`, `in_progress`, `completed`, `refused`, or `cancelled`), `documents`, and `can_sign`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Send invitation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{signerEmail}}\",\n  \"subject\": \"Document awaiting signature\",\n  \"body\": \"<p style=\\\"margin:0 0 16px;\\\">Hello,</p>\\n<p style=\\\"margin:0 0 16px;\\\">You have a document awaiting for your signature.</p>\\n<p style=\\\"margin:0 0 16px;\\\"><a href=\\\"{{signingUrl}}\\\">Sign document</a></p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/notifications/email",
+            "description": "SDK: `sendInvitation()`, which renders `EmailTemplate` and calls `sendEmail()`. See https://docs.dkbsigns.com/en/notifications.\n\n`body` is HTML or plain text. The sample uses `signingUrl` from Create envelope. Subject is at most 255 characters. For ordered signing, send this only to signers at the current priority.\n\nExpect HTTP 202:\n`{\"status\":\"success\",\"message\":\"Notification sent successfuly\"}`\n\nA read-only license returns HTTP 403 `LICENSE_READONLY`. There is no SMS-style quota on email, and no delivery webhook. Treat 202 as accepted for delivery."
+          },
+          "response": []
+        },
+        {
+          "name": "Send email with attachment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{signerEmail}}\",\n  \"subject\": \"Document ready\",\n  \"body\": \"<p>Hello</p>\",\n  \"attachments\": [\n    {\n      \"filename\": \"signed.pdf\",\n      \"content_base64\": \"JVBERi0xLjQK\",\n      \"mime_type\": \"application/pdf\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/notifications/email",
+            "description": "SDK: `sendEmail()` with `EmailAttachment`. Attachments are optional, at most 10. Each item is `filename`, base64 `content_base64`, and optional `mime_type`.\n\nReplace `content_base64` with the real file bytes. Expect HTTP 202. A read-only license returns HTTP 403 `LICENSE_READONLY`."
+          },
+          "response": []
+        },
+        {
+          "name": "Send SMS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"sms\",\n  \"phone_number\": \"{{signerPhone}}\",\n  \"message\": \"Your code is 00990\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/notifications/sms",
+            "description": "SDK: `sendSms()`. `POST /api/notifications/sms` with `channel` `sms`.\n\n`phone_number` is E.164 and must start with `+`. `message` is at most 255 characters. The company needs the `sms_notifications` module. Quota is consumed before the job is queued.\n\nExpect HTTP 202 `{ \"status\": \"success\", \"message\": \"Notification sent successfuly\" }`.\n\nQuota exhausted is HTTP 429 with `error_code` `SMS_QUOTA_REACHED`, plus `remaining` and `limit`. A read-only license returns HTTP 403 `LICENSE_READONLY`. Treat 202 as accepted for delivery; there is no delivery webhook."
+          },
+          "response": []
+        },
+        {
+          "name": "Send WhatsApp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"phone_number\": \"{{signerPhone}}\",\n  \"message\": \"Your code is 00990\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/notifications/sms",
+            "description": "SDK: `sendWhatsapp()`. Same endpoint and body as SMS, with `channel` set to `whatsapp`. The company needs the `whatsapp_notifications` module.\n\nExpect HTTP 202. An exhausted quota returns HTTP 429 with `error_code` `WHATSAPP_QUOTA_REACHED`. A read-only license returns HTTP 403 `LICENSE_READONLY`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "const first = body.documents && body.documents[0];",
+                  "if (first && first.uuid) {",
+                  "    pm.collectionVariables.set('documentUuid', first.uuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v4/documents?status=signed&page=1&per_page=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v4",
+                "documents"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "signed",
+                  "description": "Omit to list every status."
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "per_page",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "SDK: `listSignedDocuments($status, $page, $perPage)`. Documents on this account.\n\nExpect HTTP 200 with `documents`, `total`, and `page`. A 200 response stores the first document UUID in `documentUuid`."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify document",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v4/verify/{{documentUuid}}?format=json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v4",
+                "verify",
+                "{{documentUuid}}"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json"
+                }
+              ]
+            },
+            "description": "SDK: `verifyDocument($uuid)`. Public check that a document is signed. `format=json` asks for JSON.\n\nExpect HTTP 200 with `valid` and `document.status`. A signed document returns `valid: true`."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
