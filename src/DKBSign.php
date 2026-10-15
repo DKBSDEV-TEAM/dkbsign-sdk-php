@@ -270,7 +270,7 @@ final class DKBSign
     {
         $url = sprintf('%s/api/v4/sign', $this->baseUrl);
 
-        return $this->httpClient->post($url, [
+        $parts = [
             [
                 'name' => 'file',
                 'contents' => Utils::tryFopen($this->file, 'r'),
@@ -284,12 +284,16 @@ final class DKBSign
                     'otp_code' => $otpCode,
                 ]),
             ],
+        ];
 
-            [
+        if (isset($this->signatureImage) && $this->signatureImage !== '') {
+            $parts[] = [
                 'name' => 'signature_image',
                 'contents' => Utils::tryFopen($this->signatureImage, 'r'),
-            ],
-        ]);
+            ];
+        }
+
+        return $this->httpClient->post($url, $parts);
     }
 
     public function sendOtp(): HttpResponse

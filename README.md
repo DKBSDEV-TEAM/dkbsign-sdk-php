@@ -202,7 +202,7 @@ use DKBSign\Support\Field;
 
 1. **`file`** — PDF stream
 2. **`params`** — JSON: `pages`, `signature_level`, `otp_code`
-3. **`signature_image`** — image stream
+3. **`signature_image`** — image stream, sent when `setSignatureImage()` was called. Signature marks use it.
 
 A successful response includes `document_uuid`, `signed_pdf_url`, and `verification_url`.
 
@@ -405,7 +405,7 @@ Qualified signing accepts `signature`, `initials`, and `text`. Envelopes and sel
 
 ## Demo
 
-`demo/index.php` is a small page with one tab per feature: OTP, self-sign, qualified signature, envelopes, notifications (email, SMS, and WhatsApp), document list and verify, and sent or received envelopes. It loads `.env` then `.env.local` from the project root. The API token stays on the server.
+`demo/index.php` is a small page with one tab per feature: self-sign (send OTP, then sign), qualified signature, envelopes, notifications (email, SMS, and WhatsApp), document list and verify, and sent or received envelopes. It loads `.env` then `.env.local` from the project root. The API token stays on the server.
 
 From the repository root, after `composer install` and a filled `.env`:
 
