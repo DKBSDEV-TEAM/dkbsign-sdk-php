@@ -108,7 +108,7 @@
                 {
                   "key": "params",
                   "type": "text",
-                  "value": "{\n  \"pages\": [\n    {\n      \"page\": 0,\n      \"signatures\": [\n        {\n          \"x\": 120,\n          \"y\": 200,\n          \"width\": 200,\n          \"height\": 70,\n          \"type\": \"signature\"\n        }\n      ]\n    }\n  ],\n  \"signature_level\": \"simple\",\n  \"otp_code\": 123456\n}"
+                  "value": "{\"pages\":[{\"page\":0,\"signatures\":[{\"x\":120,\"y\":200,\"width\":200,\"height\":70,\"type\":\"signature\"}]}],\"signature_level\":\"simple\",\"otp_code\":123456}"
                 },
                 {
                   "key": "signature_image",
@@ -158,7 +158,7 @@
                 {
                   "key": "params",
                   "type": "text",
-                  "value": "{\n  \"pages\": [\n    {\n      \"page\": 0,\n      \"signatures\": [\n        {\n          \"anchor\": \"\\{{signature}}\",\n          \"width\": 200,\n          \"height\": 70,\n          \"type\": \"signature\",\n          \"occurrence\": 0\n        },\n        {\n          \"x\": 20,\n          \"y\": 40,\n          \"width\": 180,\n          \"height\": 40,\n          \"type\": \"text\",\n          \"text\": \"Lu et approuvé\"\n        }\n      ]\n    }\n  ],\n  \"signature_level\": \"simple\",\n  \"otp_code\": 123456\n}"
+                  "value": "{\"pages\":[{\"page\":0,\"signatures\":[{\"anchor\":\"\\{{signature}}\",\"width\":200,\"height\":70,\"type\":\"signature\",\"occurrence\":0},{\"x\":20,\"y\":40,\"width\":180,\"height\":40,\"type\":\"text\",\"text\":\"Lu et approuvé\"}]}],\"signature_level\":\"simple\",\"otp_code\":123456}"
                 },
                 {
                   "key": "signature_image",
@@ -178,7 +178,7 @@
       "name": "Qualified signature",
       "item": [
         {
-          "name": "Send qualified OTP",
+          "name": "Send qualified OTP (email)",
           "request": {
             "method": "POST",
             "header": [
@@ -193,7 +193,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"channel\": \"email\",\n  \"email\": \"awa.kone@example.com\",\n  \"subject\": \"Votre code de signature\",\n  \"body\": \"<p>Votre code est {{otp_code}}.</p>\"\n}",
+              "raw": "{\n  \"channel\": \"email\",\n  \"email\": \"awa.kone@example.com\",\n  \"subject\": \"Votre code de signature\",\n  \"body\": \"<p>Votre code est \\{{otp_code}}.</p>\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -201,7 +201,63 @@
               }
             },
             "url": "{{baseUrl}}/api/v4/sign/qualified/otp",
-            "description": "SDK: `sendQualifiedOtp()`. Sends the code required by `qualified()`.\n\n`channel` is `email`, `sms`, or `whatsapp`. `email` identifies the signer and must match the person on the signature call.\n\nEmail uses `subject` and `body` (HTML), the same fields as `sendEmail()`. SMS and WhatsApp use `phone_number` (E.164) and `message` (max 255). Write `{{otp_code}}` where the code should appear.\n\nExpect HTTP 200 with `message`, `channel`, `email`, and `expires_in_minutes`."
+            "description": "SDK: `sendQualifiedOtp()` with `channel: email`. `subject` and `body` are the same fields as `sendEmail()`. `email` must match the signer on `qualified()`.\n\nWrite `{{otp_code}}` where the code should appear. The backslash keeps Postman from replacing it.\n\nExpect HTTP 200 with `message`, `channel`, `email`, and `expires_in_minutes`."
+          },
+          "response": []
+        },
+        {
+          "name": "Send qualified OTP (SMS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"sms\",\n  \"email\": \"awa.kone@example.com\",\n  \"phone_number\": \"+2250700000000\",\n  \"message\": \"Votre code est \\{{otp_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v4/sign/qualified/otp",
+            "description": "SDK: `sendQualifiedOtp()` with `channel: sms`. `phone_number` is E.164. `message` is at most 255 characters once the code is inserted. `email` still identifies the signer and must match `qualified()`.\n\nWrite `{{otp_code}}` where the code should appear. The backslash keeps Postman from replacing it.\n\nExpect HTTP 200 with `message`, `channel`, `email`, `phone_number`, and `expires_in_minutes`."
+          },
+          "response": []
+        },
+        {
+          "name": "Send qualified OTP (WhatsApp)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"email\": \"awa.kone@example.com\",\n  \"phone_number\": \"+2250700000000\",\n  \"message\": \"Votre code est \\{{otp_code}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v4/sign/qualified/otp",
+            "description": "SDK: `sendQualifiedOtp()` with `channel: whatsapp`. `phone_number` is E.164. `message` is at most 255 characters once the code is inserted. `email` still identifies the signer and must match `qualified()`.\n\nWrite `{{otp_code}}` where the code should appear. The backslash keeps Postman from replacing it.\n\nExpect HTTP 200 with `message`, `channel`, `email`, `phone_number`, and `expires_in_minutes`."
           },
           "response": []
         },
@@ -240,7 +296,7 @@
                 {
                   "key": "payload",
                   "type": "text",
-                  "value": "{\n  \"otp_code\": \"123456\",\n  \"signer\": {\n    \"first_name\": \"Awa\",\n    \"last_name\": \"Koné\",\n    \"email\": \"awa.kone@example.com\",\n    \"phone\": \"+2250700000000\",\n    \"id_card\": {\n      \"document_type\": \"cni\",\n      \"document_number\": \"CI123456789\"\n    },\n    \"reason\": \"Acceptation du contrat\"\n  },\n  \"params\": {\n    \"pages\": [\n      {\n        \"page\": 0,\n        \"signatures\": [\n          {\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    ]\n  }\n}"
+                  "value": "{\"otp_code\":\"123456\",\"signer\":{\"first_name\":\"Awa\",\"last_name\":\"Koné\",\"email\":\"awa.kone@example.com\",\"phone\":\"+2250700000000\",\"id_card\":{\"document_type\":\"cni\",\"document_number\":\"CI123456789\"},\"reason\":\"Acceptation du contrat\"},\"params\":{\"pages\":[{\"page\":0,\"signatures\":[{\"x\":120,\"y\":200,\"width\":200,\"height\":70,\"type\":\"signature\"}]}]}}"
                 },
                 {
                   "key": "signature_image",
@@ -290,7 +346,7 @@
                 {
                   "key": "payload",
                   "type": "text",
-                  "value": "{\n  \"otp_code\": \"123456\",\n  \"signer\": {\n    \"first_name\": \"Awa\",\n    \"last_name\": \"Koné\",\n    \"email\": \"awa.kone@example.com\",\n    \"phone\": \"+2250700000000\",\n    \"id_card\": {\n      \"document_type\": \"passport\",\n      \"document_number\": \"P1234567\"\n    },\n    \"reason\": \"Acceptation du contrat\"\n  },\n  \"params\": {\n    \"pages\": [\n      {\n        \"page\": 0,\n        \"signatures\": [\n          {\n            \"anchor\": \"\\{{signature}}\",\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    ]\n  }\n}"
+                  "value": "{\"otp_code\":\"123456\",\"signer\":{\"first_name\":\"Awa\",\"last_name\":\"Koné\",\"email\":\"awa.kone@example.com\",\"phone\":\"+2250700000000\",\"id_card\":{\"document_type\":\"passport\",\"document_number\":\"P1234567\"},\"reason\":\"Acceptation du contrat\"},\"params\":{\"pages\":[{\"page\":0,\"signatures\":[{\"anchor\":\"\\{{signature}}\",\"width\":200,\"height\":70,\"type\":\"signature\"}]}]}}"
                 }
               ]
             },
@@ -351,7 +407,7 @@
                 {
                   "key": "payload",
                   "type": "text",
-                  "value": "{\n  \"title\": \"NDA\",\n  \"message\": \"Please sign this NDA\",\n  \"signing_order\": \"ordered\",\n  \"signature_level\": \"advanced\",\n  \"signers\": [\n    {\n      \"name\": \"Doe\",\n      \"first_name\": \"Jane\",\n      \"email\": \"jane@example.com\",\n      \"phone\": \"+2250700000001\",\n      \"priority\": 1,\n      \"positions\": {\n        \"0\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ],\n        \"1\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    }\n  ]\n}"
+                  "value": "{\"title\":\"NDA\",\"message\":\"Please sign this NDA\",\"signing_order\":\"ordered\",\"signature_level\":\"advanced\",\"signers\":[{\"name\":\"Doe\",\"first_name\":\"Jane\",\"email\":\"jane@example.com\",\"phone\":\"+2250700000001\",\"priority\":1,\"positions\":{\"0\":[{\"page\":0,\"x\":120,\"y\":200,\"width\":200,\"height\":70,\"type\":\"signature\"}],\"1\":[{\"page\":0,\"x\":120,\"y\":200,\"width\":200,\"height\":70,\"type\":\"signature\"}]}}]}"
                 }
               ]
             },
@@ -405,7 +461,7 @@
                 {
                   "key": "payload",
                   "type": "text",
-                  "value": "{\n  \"title\": \"NDA\",\n  \"message\": \"Please sign this NDA\",\n  \"signing_order\": \"any\",\n  \"signature_level\": \"advanced\",\n  \"signers\": [\n    {\n      \"name\": \"Doe\",\n      \"first_name\": \"Jane\",\n      \"email\": \"jane@example.com\",\n      \"phone\": \"+2250700000001\",\n      \"priority\": 1,\n      \"positions\": {\n        \"0\": [\n          {\n            \"page\": 0,\n            \"x\": 120,\n            \"y\": 200,\n            \"width\": 200,\n            \"height\": 70,\n            \"type\": \"signature\"\n          },\n          {\n            \"anchor\": \"\\{{signature}}\",\n            \"width\": 200,\n            \"height\": 70,\n            \"page\": 0,\n            \"type\": \"signature\"\n          }\n        ]\n      }\n    }\n  ]\n}"
+                  "value": "{\"title\":\"NDA\",\"message\":\"Please sign this NDA\",\"signing_order\":\"any\",\"signature_level\":\"advanced\",\"signers\":[{\"name\":\"Doe\",\"first_name\":\"Jane\",\"email\":\"jane@example.com\",\"phone\":\"+2250700000001\",\"priority\":1,\"positions\":{\"0\":[{\"page\":0,\"x\":120,\"y\":200,\"width\":200,\"height\":70,\"type\":\"signature\"},{\"anchor\":\"\\{{signature}}\",\"width\":200,\"height\":70,\"page\":0,\"type\":\"signature\"}]}}]}"
                 }
               ]
             },
