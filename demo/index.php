@@ -83,17 +83,23 @@ function client(): DKBSign
 
 function selfSign(DKBSign $client): HttpResponse
 {
+    $fieldType = posted('field_type', FieldType::SIGNATURE->value);
     $field = mark(
-        type: posted('field_type', FieldType::SIGNATURE->value),
+        type: $fieldType,
         text: blankToNull(posted('text')),
     );
 
-    return $client
+    $client
         ->setFile(upload('pdf', true))
-        ->setSignatureImage(upload('signature_image', true))
         ->setSignatureLevel(posted('signature_level', SignatureLevel::SIMPLE->value))
-        ->addField(page: (int) posted('page', '0'), fields: [$field])
-        ->selfSign((int) required('otp_code'));
+        ->addField(page: (int) posted('page', '0'), fields: [$field]);
+
+    $image = upload('signature_image', $fieldType === FieldType::SIGNATURE->value);
+    if ($image !== null) {
+        $client->setSignatureImage($image);
+    }
+
+    return $client->selfSign((int) required('otp_code'));
 }
 
 function qualifiedSign(DKBSign $client): HttpResponse
@@ -341,6 +347,13 @@ function checked(string $key, string $value, string $default): string
     return $current === $value ? ' checked' : '';
 }
 
+function placementMode(): string
+{
+    $current = array_key_exists('placement', $_POST) ? posted('placement') : 'position';
+
+    return $current === 'anchor' ? 'anchor' : 'position';
+}
+
 $actions = ['otp', 'self-sign', 'qualified-otp', 'qualified', 'envelope', 'invitation', 'sms', 'whatsapp', 'list-documents', 'verify', 'sent', 'received'];
 $result = null;
 $error = null;
@@ -375,8 +388,10 @@ $active = match ($action) {
     'list-documents', 'verify' => 'documents',
     'sent', 'received' => 'envelopes',
     'invitation', 'sms', 'whatsapp' => 'notifications',
-    'self-sign', 'qualified', 'qualified-otp', 'envelope' => $action === 'qualified-otp' ? 'qualified' : $action,
-    default => 'otp',
+    'otp', 'self-sign' => 'self-sign',
+    'qualified', 'qualified-otp' => 'qualified',
+    'envelope' => 'envelope',
+    default => 'self-sign',
 };
 
 $baseUrl = (string) (getenv('DKBSIGN_BASE_URL') ?: 'https://api.dkbsigns.com');
@@ -384,6 +399,8 @@ $hasToken = (string) (getenv('DKBSIGN_API_TOKEN') ?: '') !== '';
 $signerEmail = (string) (getenv('DKBSIGN_TEST_SIGNER_EMAIL') ?: '');
 $signerPhone = (string) (getenv('DKBSIGN_TEST_SIGNER_PHONE') ?: '+2250700000000');
 $accountEmail = (string) (getenv('DKBSIGN_TEST_EMAIL') ?: '');
+$placement = placementMode();
+$fieldType = array_key_exists('field_type', $_POST) ? posted('field_type') : FieldType::SIGNATURE->value;
 
 $levels = [
     SignatureLevel::SIMPLE->value => 'Simple',
@@ -414,7 +431,6 @@ $documentTypes = [
 ];
 
 $tabs = [
-    'otp' => 'OTP',
     'self-sign' => 'Self-sign',
     'qualified' => 'Qualified',
     'envelope' => 'Envelope',
@@ -492,6 +508,7 @@ $tabs = [
         form { display: grid; gap: 12px; }
         form + form { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+        [hidden] { display: none !important; }
         label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
         input, select, textarea {
             width: 100%;
@@ -555,25 +572,19 @@ $tabs = [
     }
     ?>
 
-    <section class="panel" id="panel-otp" <?= $active === 'otp' ? '' : 'hidden' ?>>
-        <h2>Send OTP</h2>
-        <p class="hint">Starts self-signing. The code is emailed to the account behind the API token<?= $accountEmail !== '' ? ' (<code>'.h($accountEmail).'</code>)' : '' ?>.</p>
-        <?= $active === 'otp' ? $resultBlock : '' ?>
+    <section class="panel" id="panel-self-sign" <?= $active === 'self-sign' ? '' : 'hidden' ?>>
+        <h2>Self-sign</h2>
+        <p class="hint">Two steps. First send a code. It is emailed to the account behind the API token<?= $accountEmail !== '' ? ' (<code>'.h($accountEmail).'</code>)' : '' ?>. Then upload the PDF and submit that code. A signature image is used for a signature mark. The text field is used for a text mark. Coordinates are millimetres from the bottom-left. Page numbers start at 0.</p>
+        <?= $active === 'self-sign' ? $resultBlock : '' ?>
         <form method="post">
             <input type="hidden" name="action" value="otp">
             <button type="submit">Send OTP</button>
         </form>
-    </section>
-
-    <section class="panel" id="panel-self-sign" <?= $active === 'self-sign' ? '' : 'hidden' ?>>
-        <h2>Self-sign</h2>
-        <p class="hint">Upload the PDF and signature image, then submit the OTP from the previous step. Coordinates are millimetres from the bottom-left. Page numbers start at 0.</p>
-        <?= $active === 'self-sign' ? $resultBlock : '' ?>
         <form method="post" enctype="multipart/form-data">
             <input type="hidden" name="action" value="self-sign">
             <div class="grid">
                 <label>PDF<input type="file" name="pdf" accept="application/pdf" required></label>
-                <label>Signature image<input type="file" name="signature_image" accept="image/png,image/jpeg" required></label>
+                <label data-field="signature"<?= $fieldType === FieldType::SIGNATURE->value ? '' : ' hidden' ?>>Signature image<input type="file" name="signature_image" accept="image/png,image/jpeg" required<?= $fieldType === FieldType::SIGNATURE->value ? '' : ' disabled' ?>></label>
                 <label>OTP code<input name="otp_code" inputmode="numeric" value="<?= field('otp_code') ?>" required></label>
                 <label>Level
                     <select name="signature_level"><?= options($levels, posted('signature_level', SignatureLevel::SIMPLE->value)) ?></select>
@@ -587,14 +598,20 @@ $tabs = [
                 <label><input type="radio" name="placement" value="position"<?= checked('placement', 'position', 'position') ?>> Position</label>
                 <label><input type="radio" name="placement" value="anchor"<?= checked('placement', 'anchor', 'position') ?>> Anchor</label>
             </div>
-            <div class="grid">
-                <label>X<input name="x" value="<?= field('x', '120') ?>"></label>
-                <label>Y<input name="y" value="<?= field('y', '200') ?>"></label>
-                <label>Width<input name="width" value="<?= field('width', '200') ?>"></label>
-                <label>Height<input name="height" value="<?= field('height', '70') ?>"></label>
-                <label>Anchor text<input name="anchor" value="<?= field('anchor', '{{signature}}') ?>" placeholder="{{signature}}"></label>
-                <label>Occurrence<input name="occurrence" value="<?= field('occurrence') ?>" placeholder="optional"></label>
-                <label>Text<input name="text" value="<?= field('text') ?>" placeholder="for a text mark"></label>
+            <div class="grid" data-placement="position"<?= $placement === 'position' ? '' : ' hidden' ?>>
+                <label>X<input name="x" value="<?= field('x', '120') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Y<input name="y" value="<?= field('y', '200') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Width<input name="width" value="<?= field('width', '200') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Height<input name="height" value="<?= field('height', '70') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+            </div>
+            <div class="grid" data-placement="anchor"<?= $placement === 'anchor' ? '' : ' hidden' ?>>
+                <label>Anchor text<input name="anchor" value="<?= field('anchor', '{{signature}}') ?>" placeholder="{{signature}}"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Occurrence<input name="occurrence" value="<?= field('occurrence') ?>" placeholder="optional"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Width<input name="width" value="<?= field('width', '200') ?>"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Height<input name="height" value="<?= field('height', '70') ?>"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+            </div>
+            <div class="grid" data-field="text"<?= $fieldType === FieldType::TEXT->value ? '' : ' hidden' ?>>
+                <label>Text<input name="text" value="<?= field('text') ?>" placeholder="for a text mark"<?= $fieldType === FieldType::TEXT->value ? '' : ' disabled' ?>></label>
             </div>
             <button type="submit">Sign</button>
         </form>
@@ -622,7 +639,7 @@ $tabs = [
             <input type="hidden" name="action" value="qualified">
             <div class="grid">
                 <label>PDF<input type="file" name="pdf" accept="application/pdf" required></label>
-                <label>Signature image<input type="file" name="signature_image" accept="image/png,image/jpeg"></label>
+                <label data-field="signature"<?= $fieldType === FieldType::SIGNATURE->value ? '' : ' hidden' ?>>Signature image<input type="file" name="signature_image" accept="image/png,image/jpeg"<?= $fieldType === FieldType::SIGNATURE->value ? '' : ' disabled' ?>></label>
                 <label>First name<input name="first_name" value="<?= field('first_name') ?>" required></label>
                 <label>Last name<input name="last_name" value="<?= field('last_name') ?>" required></label>
                 <label>Email<input name="email" type="email" value="<?= field('email', $signerEmail) ?>" required></label>
@@ -642,14 +659,20 @@ $tabs = [
                 <label><input type="radio" name="placement" value="position"<?= checked('placement', 'position', 'position') ?>> Position</label>
                 <label><input type="radio" name="placement" value="anchor"<?= checked('placement', 'anchor', 'position') ?>> Anchor</label>
             </div>
-            <div class="grid">
-                <label>X<input name="x" value="<?= field('x', '120') ?>"></label>
-                <label>Y<input name="y" value="<?= field('y', '200') ?>"></label>
-                <label>Width<input name="width" value="<?= field('width', '200') ?>"></label>
-                <label>Height<input name="height" value="<?= field('height', '70') ?>"></label>
-                <label>Anchor text<input name="anchor" value="<?= field('anchor', '{{signature}}') ?>"></label>
-                <label>Occurrence<input name="occurrence" value="<?= field('occurrence') ?>" placeholder="optional"></label>
-                <label>Text<input name="text" value="<?= field('text') ?>" placeholder="for a text mark"></label>
+            <div class="grid" data-placement="position"<?= $placement === 'position' ? '' : ' hidden' ?>>
+                <label>X<input name="x" value="<?= field('x', '120') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Y<input name="y" value="<?= field('y', '200') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Width<input name="width" value="<?= field('width', '200') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+                <label>Height<input name="height" value="<?= field('height', '70') ?>"<?= $placement === 'position' ? '' : ' disabled' ?>></label>
+            </div>
+            <div class="grid" data-placement="anchor"<?= $placement === 'anchor' ? '' : ' hidden' ?>>
+                <label>Anchor text<input name="anchor" value="<?= field('anchor', '{{signature}}') ?>"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Occurrence<input name="occurrence" value="<?= field('occurrence') ?>" placeholder="optional"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Width<input name="width" value="<?= field('width', '200') ?>"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+                <label>Height<input name="height" value="<?= field('height', '70') ?>"<?= $placement === 'anchor' ? '' : ' disabled' ?>></label>
+            </div>
+            <div class="grid" data-field="text"<?= $fieldType === FieldType::TEXT->value ? '' : ' hidden' ?>>
+                <label>Text<input name="text" value="<?= field('text') ?>" placeholder="for a text mark"<?= $fieldType === FieldType::TEXT->value ? '' : ' disabled' ?>></label>
             </div>
             <button type="submit">Sign</button>
         </form>
@@ -788,6 +811,53 @@ $tabs = [
         });
     });
 
+    function syncPlacement(form) {
+        const selected = form.querySelector('input[name="placement"]:checked');
+        if (!selected) {
+            return;
+        }
+        form.querySelectorAll('[data-placement]').forEach((group) => {
+            const active = group.dataset.placement === selected.value;
+            group.hidden = !active;
+            group.querySelectorAll('input').forEach((input) => {
+                input.disabled = !active;
+            });
+        });
+    }
+
+    function syncFieldType(form) {
+        const select = form.querySelector('select[name="field_type"]');
+        if (!select) {
+            return;
+        }
+        form.querySelectorAll('[data-field]').forEach((group) => {
+            const active = group.dataset.field === select.value;
+            group.hidden = !active;
+            group.querySelectorAll('input').forEach((input) => {
+                input.disabled = !active;
+            });
+        });
+    }
+
+    document.querySelectorAll('form').forEach((form) => {
+        if (form.querySelector('input[name="placement"]')) {
+            syncPlacement(form);
+            form.addEventListener('change', (event) => {
+                if (event.target.name === 'placement') {
+                    syncPlacement(form);
+                }
+            });
+        }
+        if (form.querySelector('select[name="field_type"]')) {
+            syncFieldType(form);
+            form.addEventListener('change', (event) => {
+                if (event.target.name === 'field_type') {
+                    syncFieldType(form);
+                }
+            });
+        }
+    });
+
     const posted = document.body.dataset.active;
     const hash = location.hash.replace('#', '');
     if (posted) {
@@ -795,7 +865,7 @@ $tabs = [
     } else if (hash) {
         show(hash);
     } else {
-        show('otp');
+        show('self-sign');
     }
 </script>
 </body>
